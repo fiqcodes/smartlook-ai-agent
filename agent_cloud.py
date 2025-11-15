@@ -1,7 +1,7 @@
 """
 TheLook Ecommerce AI Data Analyst Agent - Cloud Version (ENHANCED FORMATTING + CONVERSATIONAL)
 Compatible with langgraph 0.0.26
-UPDATED FOR DEPLOYMENT
+UPDATED FOR DEPLOYMENT - FIXED CREDENTIALS
 """
 
 import logging
@@ -15,6 +15,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, Tool
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from google.cloud import bigquery
+from google.oauth2 import service_account
 from typing import Literal, TypedDict, Annotated, Sequence
 
 # Suppress warnings
@@ -46,23 +47,21 @@ PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
 if not PROJECT_ID:
     raise ValueError("GOOGLE_CLOUD_PROJECT not found in environment variables")
 
-# Try multiple credential methods
+# Get GCP credentials from environment variable
+gcp_json_str = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
+if not gcp_json_str:
+    raise ValueError("GCP_SERVICE_ACCOUNT_JSON not found in environment variables")
+
 try:
-    # Method 1: From JSON string environment variable (Render/Railway)
-    gcp_json = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
-    if gcp_json:
-        credentials_dict = json.loads(gcp_json)
-        from google.oauth2 import service_account
-        credentials = service_account.Credentials.from_service_account_info(credentials_dict)
-        bq_client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
-        logger.info("✅ BigQuery initialized with JSON credentials")
-    else:
-        # Method 2: Default credentials (for local development)
-        bq_client = bigquery.Client(project=PROJECT_ID)
-        logger.info("✅ BigQuery initialized with default credentials")
+    # Parse JSON credentials
+    credentials_dict = json.loads(gcp_json_str)
+    credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+    bq_client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
+    logger.info("✅ BigQuery initialized successfully")
+except json.JSONDecodeError as e:
+    raise ValueError(f"Invalid JSON in GCP_SERVICE_ACCOUNT_JSON: {str(e)}")
 except Exception as e:
-    logger.error(f"❌ Failed to initialize BigQuery: {str(e)}")
-    raise
+    raise ValueError(f"Failed to initialize BigQuery: {str(e)}")
 
 ECOMMERCE_TABLES = {
     "users": "bigquery-public-data.thelook_ecommerce.users",
