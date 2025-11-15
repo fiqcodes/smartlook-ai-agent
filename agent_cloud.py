@@ -1,12 +1,14 @@
 """
 TheLook Ecommerce AI Data Analyst Agent - Cloud Version (ENHANCED FORMATTING + CONVERSATIONAL)
 Compatible with langgraph 0.0.26
+UPDATED FOR DEPLOYMENT
 """
 
 import logging
 import re
 import warnings
 import os
+import json
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage, BaseMessage
@@ -35,31 +37,32 @@ class AgentState(TypedDict):
 # Get API keys
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 if not GROQ_API_KEY:
-    try:
-        import streamlit as st
-        GROQ_API_KEY = st.secrets.get("GROQ_API_KEY")
-    except:
-        pass
-
-if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY not found")
+    raise ValueError("GROQ_API_KEY not found in environment variables")
 
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 
-# Initialize BigQuery
+# Initialize BigQuery with proper credential handling for deployment
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
 if not PROJECT_ID:
-    try:
-        import streamlit as st
-        PROJECT_ID = st.secrets.get("GOOGLE_CLOUD_PROJECT")
-        credentials_dict = dict(st.secrets["gcp_service_account"])
+    raise ValueError("GOOGLE_CLOUD_PROJECT not found in environment variables")
+
+# Try multiple credential methods
+try:
+    # Method 1: From JSON string environment variable (Render/Railway)
+    gcp_json = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
+    if gcp_json:
+        credentials_dict = json.loads(gcp_json)
         from google.oauth2 import service_account
         credentials = service_account.Credentials.from_service_account_info(credentials_dict)
         bq_client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
-    except Exception as e:
-        raise ValueError(f"GOOGLE_CLOUD_PROJECT not found: {e}")
-else:
-    bq_client = bigquery.Client(project=PROJECT_ID)
+        logger.info("✅ BigQuery initialized with JSON credentials")
+    else:
+        # Method 2: Default credentials (for local development)
+        bq_client = bigquery.Client(project=PROJECT_ID)
+        logger.info("✅ BigQuery initialized with default credentials")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize BigQuery: {str(e)}")
+    raise
 
 ECOMMERCE_TABLES = {
     "users": "bigquery-public-data.thelook_ecommerce.users",
@@ -111,7 +114,7 @@ Question: "Revenue by product category"
 SQL: SELECT product_category, SUM(sale_price) as total_revenue FROM order_items WHERE status = 'Complete' GROUP BY product_category ORDER BY total_revenue DESC LIMIT 10
 """
 
-CONVERSATIONAL_SYSTEM_PROMPT = """You are ShopMind, a friendly AI assistant specializing in TheLook Ecommerce data analysis.
+CONVERSATIONAL_SYSTEM_PROMPT = """You are SmartLook, a friendly AI assistant specializing in TheLook Ecommerce data analysis.
 
 Your personality:
 - Friendly, helpful, and enthusiastic about e-commerce data
@@ -119,7 +122,7 @@ Your personality:
 - Expert in ecommerce metrics and SQL queries
 
 About you:
-- Name: ShopMind
+- Name: SmartLook
 - Purpose: Help users analyze TheLook Ecommerce data through natural language queries
 - Capabilities: Query and analyze customers, orders, products, inventory, sales, revenue, and user behavior
 - Data source: TheLook Ecommerce public dataset on Google BigQuery (a fictitious ecommerce clothing store)
@@ -258,7 +261,7 @@ def _format_as_narrative(df, question: str, row_count: int) -> str:
 
 @tool
 def chat_with_user(message: str) -> str:
-    """Handle general conversation, greetings, and questions about ShopMind's identity and capabilities.
+    """Handle general conversation, greetings, and questions about SmartLook's identity and capabilities.
     Use this tool when users:
     - Greet you (hi, hello, hey)
     - Thank you
