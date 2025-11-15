@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartLook Ecommerce AI Analyst</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #f0f4f8;
+            color: #1e293b;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: linear-gradient(180deg, #2b85ffff 0%, #2563eb 100%);
+            border-right: 1px solid #2563eb;
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+        }
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+        .logo-svg {
+            width: 200px;
+            height: auto;
+        }
+        .new-chat-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border: 1px solid #ffffff;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #2b85ffff;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+        .new-chat-btn:hover {
+            background: #f0f4f8;
+            border-color: #f0f4f8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+        .history-section {
+            margin-bottom: 20px;
+        }
+        .history-title {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.7);
+            padding: 8px 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+        .history-item {
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #1e293b;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: rgba(255, 255, 255, 0.9);
+        }
+        .history-item:hover {
+            background: #ffffff;
+            transform: translateX(4px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .history-item.active {
+            background: #ffffff;
+            color: #2b85ffff;
+            font-weight: 500;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        .sidebar-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            padding-top: 12px;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .user-info:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 4px;
+            background: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #2b85ffff;
+            font-weight: 600;
+            padding: 6px;
+        }
+        .user-avatar svg {
+            width: 100%;
+            height: 100%;
+        }
+        .user-avatar svg path {
+            fill: #2b85ffff;
+        }
+        .user-details {
+            flex: 1;
+        }
+        .user-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #ffffff;
+        }
+        .user-role {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        /* Main Chat Area */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: #ffffff;
+        }
+        .chat-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #e2e8f0;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .chat-title-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .chat-title-logo {
+            width: 24px;
+            height: 28px;
+        }
+        .chat-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            background: #dcfce7;
+            border-radius: 12px;
+            font-size: 12px;
+            color: #166534;
+            font-weight: 500;
+        }
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #166534;
+        }
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            background: #f0f4f8;
+        }
+        .welcome-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .welcome-logo {
+            width: 80px;
+            height: 93px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+        .welcome-logo img {
+            width: 64px;
+            height: 74px;
+        }
+        .welcome-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            text-align: center;
+            color: #1e293b;
+        }
+        .welcome-subtitle {
+            font-size: 16px;
+            color: #64748b;
+            margin-bottom: 48px;
+            text-align: center;
+            max-width: 600px;
+        }
+        .example-prompts {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            width: 100%;
+            max-width: 800px;
+        }
+        .example-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        .example-card:hover {
+            border-color: #2b85ffff;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+            transform: translateY(-2px);
+        }
+        .example-icon {
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+        .example-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #1e293b;
+        }
+        .example-text {
+            font-size: 13px;
+            color: #64748b;
+            line-height: 1.5;
+        }
+        /* Chat Messages */
+        .messages-container {
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 20px;
+        }
+        .message {
+            display: flex;
+            gap: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 12px;
+            animation: fadeIn 0.3s;
+            background: white;
+            border: 1px solid #e2e8f0;
+            position: relative;
+            overflow: hidden;
+        }
+        .message::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0) 100%);
+            pointer-events: none;
+        }
+        .message::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent 30%,
+                rgba(255, 255, 255, 0.3) 50%,
+                transparent 70%
+            );
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .message:hover::after {
+            opacity: 1;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .message.user {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-color: #2b85ffff;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+        }
+        .message.user::before {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 100%);
+        }
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 14px;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+        }
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #2b85ffff 0%, #60a5fa 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+            padding: 8px;
+        }
+        .message.user .message-avatar svg {
+            width: 100%;
+            height: 100%;
+        }
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, #2b85ffff 0%, #60a5fa 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            padding: 8px;
+        }
+        .message.assistant .message-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .message.assistant {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        .message-content {
+            flex: 1;
+            line-height: 1.5;
+            font-size: 15px;
+            color: #1e293b;
+            position: relative;
+            z-index: 1;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            max-width: 100%;
+        }
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .message-sender {
+            font-weight: 600;
+            font-size: 14px;
+            color: #1e293b;
+        }
+        .message-time {
+            font-size: 12px;
+            color: #64748b;
+        }
+        .message-content pre {
+            background: #f8fafc;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 0;
+            border: 1px solid #e2e8f0;
+            max-width: 100%;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        .message-content code {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            color: #1e293b;
+            word-break: break-word;
+        }
+        .message-content h3 {
+            color: #2b85ffff;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 12px 0 4px 0;
+        }
+        .message-content h3:first-of-type {
+            margin-top: 0;
+        }
+        .message-content .key-insights-header {
+            margin-top: 20px;
+            font-size: 18px;
+            padding-top: 20px;
+            margin-bottom: -20px;
+        }
+        .message-content p {
+            margin: 6px 0;
+            line-height: 1.5;
+        }
+        .message-content strong {
+            font-weight: 600;
+            color: #2b85ffff;
+        }
+        .message-content .sql-query-header {
+            margin-top: -1px;
+            font-size: 18px;
+            padding-top: 20px;
+            margin-bottom: -20px;
+        }
+        /* Loading Animation */
+        .loading {
+            display: flex;
+            gap: 4px;
+            padding: 8px 0;
+        }
+        .loading-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #2b85ffff;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+        .loading-dot:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+        .loading-dot:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+        @keyframes bounce {
+            0%, 80%, 100% {
+                transform: scale(0);
+            }
+            40% {
+                transform: scale(1);
+            }
+        }
+        /* Input Area */
+        .input-area {
+            padding: 20px 24px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+        }
+        .input-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .input-wrapper {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            transition: border-color 0.2s;
+            position: relative;
+            padding: 8px;
+            gap: 8px;
+        }
+        .input-wrapper:focus-within {
+            border-color: #2b85ffff;
+        }
+        #messageInput {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #1e293b;
+            font-size: 15px;
+            outline: none;
+            resize: none;
+            max-height: 200px;
+            font-family: inherit;
+            padding: 8px;
+            min-height: 24px;
+        }
+        #messageInput::placeholder {
+            color: #94a3b8;
+        }
+        .send-btn {
+            width: 36px;
+            height: 36px;
+            background: #2b85ffff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .send-btn:hover:not(:disabled) {
+            background: #2563eb;
+            transform: scale(1.05);
+        }
+        .send-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .send-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+        .disclaimer {
+            text-align: center;
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 12px;
+        }
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .sidebar ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+        }
+        .sidebar ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+        .chat-container::-webkit-scrollbar-track {
+            background: #f0f4f8;
+        }
+        .chat-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 5px;
+        }
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: absolute;
+                left: -260px;
+                z-index: 100;
+                height: 100vh;
+                transition: left 0.3s;
+                box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+            }
+            .sidebar.open {
+                left: 0;
+            }
+            .example-prompts {
+                grid-template-columns: 1fr;
+            }
+            .chat-header {
+                padding: 12px 16px;
+            }
+            .chat-title {
+                font-size: 16px;
+            }
+            .messages-container {
+                padding: 16px;
+            }
+        }
+        /* Tags */
+        .tag {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #dbeafe;
+            color: #1e40af;
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 2px;
+        }
+        /* Code inline */
+        .message-content code:not(pre code) {
+            background: #f0f4f8;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #2563eb;
+            border: 1px solid #e2e8f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <img src="/assets/thelook.png" alt="TheLook" class="logo-svg">
+            </div>
+            <button class="new-chat-btn" onclick="newChat()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                New Chat
+            </button>
+            <div class="chat-history">
+                <div class="history-section">
+                    <div class="history-title">Recent</div>
+                    <div id="historyList"></div>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                        </svg>
+                    </div>
+                    <div class="user-details">
+                        <div class="user-name">User</div>
+                        <div class="user-role">Business Analyst</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="chat-header">
+                <div class="chat-title-wrapper">
+                    <img src="/assets/smartlook.png"
+                         style="width: 120px; height: auto; cursor: pointer;"
+                         onclick="newChat()"
+                         title="Hi, I'm SmartLook. How can I help you today?">
+                </div>
+            </div>
+            <div class="chat-container" id="chatContainer">
+                <!-- Welcome Screen -->
+                <div class="welcome-screen" id="welcomeScreen">
+                    <div class="welcome-logo">
+                        <img src="/assets/smartlook.png"
+                             style="width: 300px; height: auto;">
+                    </div>
+                    <p class="welcome-subtitle">
+                        Ask anything about TheLook data or performance. I can analyze customers, orders, products, revenue, and generate SQL queries.
+                    </p>
+                    <div class="example-prompts">
+                        <div class="example-card" onclick="sendExample('What are the top 5 best-selling products?')">
+                            <div class="example-title">Best Sellers</div>
+                            <div class="example-text">Find the top-selling products by revenue</div>
+                        </div>
+                        <div class="example-card" onclick="sendExample('Which customers have the highest total spending?')">
+                            <div class="example-title">Top Customers</div>
+                            <div class="example-text">Discover customers with highest purchases</div>
+                        </div>
+                        <div class="example-card" onclick="sendExample('Show the total revenue by product category?')">
+                            <div class="example-title">Category Performance</div>
+                            <div class="example-text">Analyze revenue across product categories</div>
+                        </div>
+                        <div class="example-card" onclick="sendExample('What is the average order value and how many orders were completed?')">
+                            <div class="example-title">Order Metrics</div>
+                            <div class="example-text">Get insights on order values and completion rates</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Messages Container -->
+                <div class="messages-container" id="messagesContainer" style="display: none;"></div>
+            </div>
+            <!-- Input Area -->
+            <div class="input-area">
+                <div class="input-container">
+                    <div class="input-wrapper">
+                        <textarea
+                            id="messageInput"
+                            placeholder="Ask me anything about TheLook data or performance..."
+                            rows="1"
+                            onkeydown="handleKeyPress(event)"
+                            oninput="adjustTextareaHeight(this)"
+                        ></textarea>
+                        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="disclaimer">
+                        SmartLook can make mistakes. Always verify important SQL queries.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let chatHistory = [];
+        let currentChatId = null;
+        let isLoading = false;
+        let allChats = {}; // Store all chat conversations
+
+        function adjustTextareaHeight(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function newChat() {
+            // Save current chat before creating new one
+            if (currentChatId && chatHistory.length > 0) {
+                allChats[currentChatId] = [...chatHistory];
+            }
+            currentChatId = Date.now().toString();
+            chatHistory = [];
+            document.getElementById('welcomeScreen').style.display = 'flex';
+            document.getElementById('messagesContainer').style.display = 'none';
+            document.getElementById('messagesContainer').innerHTML = '';
+            // Update active state
+            document.querySelectorAll('.history-item').forEach(item => {
+                item.classList.remove('active');
+            });
+        }
+
+        function sendExample(text) {
+            document.getElementById('messageInput').value = text;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (!message || isLoading) return;
+            // If no current chat, create one
+            if (!currentChatId) {
+                currentChatId = Date.now().toString();
+            }
+            // Hide welcome screen
+            document.getElementById('welcomeScreen').style.display = 'none';
+            document.getElementById('messagesContainer').style.display = 'block';
+            // Add user message
+            addMessage('user', message);
+            // Clear input
+            input.value = '';
+            input.style.height = 'auto';
+            // Add to history
+            chatHistory.push({ role: 'user', content: message });
+            // Update sidebar only for the first message in a chat
+            if (chatHistory.length === 1) {
+                updateHistorySidebar(message);
+            }
+            // Show loading
+            isLoading = true;
+            const loadingId = addLoadingMessage();
+            try {
+                // Call backend API
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+                const data = await response.json();
+                // Remove loading
+                removeLoadingMessage(loadingId);
+                // Add assistant response
+                addMessage('assistant', data.response);
+                chatHistory.push({ role: 'assistant', content: data.response });
+                // Save to allChats
+                allChats[currentChatId] = [...chatHistory];
+            } catch (error) {
+                removeLoadingMessage(loadingId);
+                addMessage('assistant', '❌ Sorry, there was an error processing your request. Please try again.');
+                console.error('Error:', error);
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        function addMessage(role, content) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            if (role === 'user') {
+                avatar.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                `;
+            } else {
+                avatar.innerHTML = `
+                    <img src="/assets/symbol.png" alt="SmartLook" style="width: 150%; height: 150%; object-fit: contain;" title="Hi, I'm SmartLook. How can I help you today?">
+                `;
+                avatar.style.cursor = 'pointer';
+            }
+            const contentWrapper = document.createElement('div');
+            contentWrapper.style.flex = '1';
+            const header = document.createElement('div');
+            header.className = 'message-header';
+            const sender = document.createElement('div');
+            sender.className = 'message-sender';
+            sender.textContent = role === 'user' ? 'You' : 'SmartLook';
+            const time = document.createElement('div');
+            time.className = 'message-time';
+            time.textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            header.appendChild(sender);
+            header.appendChild(time);
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = formatMessage(content);
+            contentWrapper.appendChild(header);
+            contentWrapper.appendChild(contentDiv);
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentWrapper);
+            messagesContainer.appendChild(messageDiv);
+            // Scroll to bottom
+            const chatContainer = document.getElementById('chatContainer');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function formatMessage(text) {
+            text = text.replace(/📊|📝|📈|🎯|💬|🏆|📊|🔍|⚠️|✅|❌/g, '');
+            text = text.replace(/\*\*(Key Insights:)\*\*/g, '<h3 class="key-insights-header">$1</h3>');
+            text = text.replace(/\*\*(SQL Query:)\*\*/g, '<h3 class="sql-query-header">$1</h3>');
+            text = text.replace(/\n={3,}\n/g, '\n');
+            text = text.replace(/```sql\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+            text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+            text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            text = text.replace(/\* \*\*(.*?)\*\*/g, '<br>• <strong style="color: #f48024;">$1</strong>');
+            text = text.replace(/\n\n+/g, '\n');
+            text = text.replace(/\n/g, '<br>');
+            text = text.replace(/(<br>\s*){2,}/g, '<br>');
+            text = text.replace(/\*\*[\n\s]*<h3 class="key-insights-header">/g, '<h3 class="key-insights-header">');
+            text = text.replace(/\*\*[\n\s]*<h3 class="sql-query-header">/g, '<h3 class="sql-query-header">');
+            text = text.replace(/<br>\*\*<br>/g, '<br>');
+            text = text.replace(/^\*\*<br>/, '');
+            text = text.replace(/<br>\*\*$/, '');
+            return text;
+        }
+
+        function addLoadingMessage() {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+            messageDiv.id = 'loading-message';
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.style.cursor = 'pointer';
+            avatar.innerHTML = `
+                <img src="/assets/symbol.png" alt="SmartLook" style="width: 150%; height: 150%; object-fit: contain;" title="Hi, I'm SmartLook. How can I help you today?">
+            `;
+            const contentWrapper = document.createElement('div');
+            contentWrapper.style.flex = '1';
+            const header = document.createElement('div');
+            header.className = 'message-header';
+            const sender = document.createElement('div');
+            sender.className = 'message-sender';
+            sender.textContent = 'SmartLook';
+            const time = document.createElement('div');
+            time.className = 'message-time';
+            time.textContent = 'Analyzing...';
+            header.appendChild(sender);
+            header.appendChild(time);
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = '<div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>';
+            contentWrapper.appendChild(header);
+            contentWrapper.appendChild(contentDiv);
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentWrapper);
+            messagesContainer.appendChild(messageDiv);
+            const chatContainer = document.getElementById('chatContainer');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return 'loading-message';
+        }
+
+        function removeLoadingMessage(id) {
+            const loadingMsg = document.getElementById(id);
+            if (loadingMsg) {
+                loadingMsg.remove();
+            }
+        }
+
+        function updateHistorySidebar(message) {
+            const historyList = document.getElementById('historyList');
+            const existingItem = document.querySelector(`[data-chat-id="${currentChatId}"]`);
+            if (existingItem) {
+                document.querySelectorAll('.history-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                existingItem.classList.add('active');
+                return;
+            }
+            const historyItem = document.createElement('div');
+            historyItem.className = 'history-item active';
+            historyItem.setAttribute('data-chat-id', currentChatId);
+            historyItem.textContent = message.substring(0, 30) + (message.length > 30 ? '...' : '');
+            historyItem.onclick = function() {
+                loadChat(this.getAttribute('data-chat-id'));
+            };
+            document.querySelectorAll('.history-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            historyItem.classList.add('active');
+            historyList.insertBefore(historyItem, historyList.firstChild);
+        }
+
+        function loadChat(chatId) {
+            if (currentChatId && chatHistory.length > 0) {
+                allChats[currentChatId] = [...chatHistory];
+            }
+            currentChatId = chatId;
+            chatHistory = allChats[chatId] || [];
+            document.getElementById('welcomeScreen').style.display = 'none';
+            document.getElementById('messagesContainer').style.display = 'block';
+            document.getElementById('messagesContainer').innerHTML = '';
+            chatHistory.forEach(msg => {
+                addMessage(msg.role, msg.content);
+            });
+            document.querySelectorAll('.history-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.getAttribute('data-chat-id') === chatId) {
+                    item.classList.add('active');
+                }
+            });
+        }
+
+        // Initialize
+        newChat();
+    </script>
+</body>
+</html>
