@@ -63,6 +63,30 @@
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
+        
+        /* NEW: Clear History Button */
+        .clear-history-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+        .clear-history-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-1px);
+        }
+        
         .chat-history {
             flex: 1;
             overflow-y: auto;
@@ -152,6 +176,21 @@
             font-size: 11px;
             color: rgba(255, 255, 255, 0.7);
         }
+        
+        /* NEW: Context indicator badge */
+        .context-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            font-size: 10px;
+            color: #ffffff;
+            font-weight: 500;
+            margin-left: 8px;
+        }
+        
         /* Main Chat Area */
         .main-content {
             flex: 1;
@@ -637,6 +676,14 @@
                 </svg>
                 New Chat
             </button>
+            <!-- NEW: Clear History Button -->
+            <button class="clear-history-btn" onclick="clearConversationHistory()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                Clear History
+            </button>
             <div class="chat-history">
                 <div class="history-section">
                     <div class="history-title">Recent</div>
@@ -665,6 +712,9 @@
                          style="width: 120px; height: auto; cursor: pointer;"
                          onclick="newChat()"
                          title="Hi, I'm SmartLook. How can I help you today?">
+                    <!-- NEW: Context indicator -->
+                    <span class="context-badge" id="contextBadge" style="display: none;">
+                    </span>
                 </div>
             </div>
             <div class="chat-container" id="chatContainer">
@@ -755,6 +805,10 @@
             document.querySelectorAll('.history-item').forEach(item => {
                 item.classList.remove('active');
             });
+            
+            // NEW: Clear backend conversation history
+            clearBackendHistory();
+            updateContextBadge(false);
         }
 
         function sendExample(text) {
@@ -804,6 +858,11 @@
                 chatHistory.push({ role: 'assistant', content: data.response });
                 // Save to allChats
                 allChats[currentChatId] = [...chatHistory];
+                
+                // NEW: Update context badge if context is being used
+                if (data.context_aware) {
+                    updateContextBadge(true);
+                }
             } catch (error) {
                 removeLoadingMessage(loadingId);
                 addMessage('assistant', '❌ Sorry, there was an error processing your request. Please try again.');
@@ -962,7 +1021,96 @@
                     item.classList.add('active');
                 }
             });
+            
+            // NEW: Clear backend history when switching chats
+            clearBackendHistory();
+            updateContextBadge(false);
         }
+
+        // ============================================================================
+        // NEW FUNCTIONS: Conversation Memory Management
+        // ============================================================================
+
+        /**
+         * Clear conversation history on backend
+         */
+        async function clearBackendHistory() {
+            try {
+                const response = await fetch('/api/clear', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                const data = await response.json();
+                console.log('Backend history cleared:', data);
+            } catch (error) {
+                console.error('Error clearing backend history:', error);
+            }
+        }
+
+        /**
+         * Clear all conversation history (frontend + backend)
+         */
+        async function clearConversationHistory() {
+            if (!confirm('Are you sure you want to clear all conversation history? This will remove all chats from the sidebar.')) {
+                return;
+            }
+            
+            try {
+                // Clear backend
+                await clearBackendHistory();
+                
+                // Clear frontend
+                allChats = {};
+                chatHistory = [];
+                currentChatId = null;
+                
+                // Clear UI
+                document.getElementById('historyList').innerHTML = '';
+                document.getElementById('welcomeScreen').style.display = 'flex';
+                document.getElementById('messagesContainer').style.display = 'none';
+                document.getElementById('messagesContainer').innerHTML = '';
+                
+                updateContextBadge(false);
+                
+                console.log('All conversation history cleared');
+            } catch (error) {
+                console.error('Error clearing conversation history:', error);
+                alert('Failed to clear conversation history. Please try again.');
+            }
+        }
+
+        /**
+         * Update context awareness badge
+         */
+        function updateContextBadge(isActive) {
+            const badge = document.getElementById('contextBadge');
+            if (isActive) {
+                badge.style.display = 'inline-flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        /**
+         * Get conversation history from backend (for debugging)
+         */
+        async function getBackendHistory() {
+            try {
+                const response = await fetch('/api/history');
+                const data = await response.json();
+                console.log('Backend conversation history:', data);
+                return data;
+            } catch (error) {
+                console.error('Error getting backend history:', error);
+                return null;
+            }
+        }
+
+        // ============================================================================
+        // END NEW FUNCTIONS
+        // ============================================================================
 
         // Initialize
         newChat();
