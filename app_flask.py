@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import logging
-from agent_cloud import ask, check_connection
+from agent_cloud import ask, check_connection, clear_history, get_conversation_history, get_last_tool_call
 
 # Configure logging
 logging.basicConfig(
