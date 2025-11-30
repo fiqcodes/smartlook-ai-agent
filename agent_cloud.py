@@ -15,6 +15,7 @@ from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage, BaseMessage
 from langgraph.graph import StateGraph, END
 from google.cloud import bigquery
+from google.oauth2 import service_account
 from typing import Literal, TypedDict, Sequence
 import json
 import plotly.graph_objects as go
