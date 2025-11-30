@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import logging
+import json
 from agent_cloud import ask, check_connection, clear_history, get_conversation_history, get_last_tool_call
 
 # Configure logging
@@ -25,7 +26,7 @@ def index():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    """Handle chat messages with conversation memory"""
+    """Handle chat messages with conversation memory and visualization support"""
     try:
         data = request.get_json()
         message = data.get('message', '').strip()
@@ -35,20 +36,80 @@ def chat():
         
         logger.info(f"Received message: {message}")
         
-        # Call your agent (automatically uses conversation history)
+        # Call agent
         response = ask(message)
         
-        # Get tool routing info for debugging
+        # Get tool routing info
         tool_call = get_last_tool_call()
         
         logger.info(f"Tool used: {tool_call['name'] if tool_call else 'unknown'}")
-        logger.info(f"Agent response: {response[:100]}...")
+        
+        # Check if response is visualization data (JSON)
+        is_visualization = False
+        is_data_response = False
+        visualization_data = None
+        data_response = None
+        
+        # Check if tool is create_visualization OR create_cohort_analysis
+        if tool_call and tool_call['name'] in ['create_visualization', 'create_cohort_analysis']:
+            try:
+                visualization_data = json.loads(response)
+                is_visualization = True
+                
+                # Generate analysis text for visualizations (if not already present)
+                if not visualization_data.get('error') and not visualization_data.get('response_text'):
+                    # Import the tool directly
+                    from agent_cloud import answer_ecommerce_question
+                    
+                    # Get the original question
+                    question = visualization_data.get('question', message)
+                    
+                    # Call answer_ecommerce_question to get formatted analysis with recommendations
+                    try:
+                        analysis_response = answer_ecommerce_question.invoke({"question": question})
+                        
+                        # NEW: Parse the JSON response to extract just the text
+                        try:
+                            parsed_response = json.loads(analysis_response)
+                            if parsed_response.get('is_data_response'):
+                                visualization_data['response_text'] = parsed_response.get('response_text', '')
+                            else:
+                                visualization_data['response_text'] = analysis_response
+                        except json.JSONDecodeError:
+                            # If not JSON, use as-is (backward compatibility)
+                            visualization_data['response_text'] = analysis_response
+                            
+                        logger.info("Generated analysis with actionable recommendations")
+                    except Exception as e:
+                        logger.warning(f"Could not generate analysis text: {e}")
+                
+                logger.info(f"Visualization created successfully: {tool_call['name']}")
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse visualization JSON")
+        
+        # NEW: Check if tool is answer_ecommerce_question (data response with CSV)
+        elif tool_call and tool_call['name'] == 'answer_ecommerce_question':
+            try:
+                data_response = json.loads(response)
+                if data_response.get('is_data_response'):
+                    is_data_response = True
+                    logger.info("Data response with CSV download created successfully")
+                else:
+                    # Not a data response, treat as regular text
+                    data_response = None
+            except json.JSONDecodeError:
+                # Not JSON, treat as regular text response
+                logger.info("Regular text response from answer_ecommerce_question")
         
         return jsonify({
             'response': response,
             'status': 'success',
             'tool_used': tool_call['name'] if tool_call else None,
-            'context_aware': len(get_conversation_history()) > 0
+            'context_aware': len(get_conversation_history()) > 0,
+            'is_visualization': is_visualization,
+            'visualization_data': visualization_data,
+            'is_data_response': is_data_response,
+            'data_response': data_response
         })
     
     except Exception as e:
@@ -77,7 +138,7 @@ def clear_conversation():
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
-    """Get conversation history (for debugging)"""
+    """Get conversation history"""
     try:
         history = get_conversation_history()
         return jsonify({
@@ -103,7 +164,10 @@ def health():
             'status': 'healthy',
             'connections': status,
             'conversation_messages': history_count,
-            'memory_enabled': True
+            'memory_enabled': True,
+            'visualization_enabled': True,
+            'cohort_analysis_enabled': True,
+            'csv_download_enabled': True  # NEW
         })
     except Exception as e:
         return jsonify({
