@@ -505,35 +505,35 @@ def _detect_x_axis_label(x_col: str, question: str, df: pd.DataFrame) -> str:
     sample_values = df[x_col].head(5).astype(str).tolist()
     sample_str = ' '.join(sample_values).lower()
     
-    # Strategy 1: Check question keywords FIRST (user intent is primary)
-    if any(word in question_lower for word in ['quarter', 'quarterly', 'q1', 'q2', 'q3', 'q4']):
-        return 'Quarter'
-    elif any(word in question_lower for word in ['month', 'monthly']):
-        return 'Month'
-    elif any(word in question_lower for word in ['year', 'yearly', 'annual', '2020', '2021', '2022', '2023', '2024', '2025']):
-        return 'Year'
-    elif any(word in question_lower for word in ['day', 'daily', 'date']):
-        return 'Date'
-    elif any(word in question_lower for word in ['week', 'weekly']):
-        return 'Week'
-    
-    # Strategy 2: Check for categorical dimensions
+    # Strategy 1: Check for categorical dimensions FIRST (higher priority)
+    if any(word in question_lower for word in ['category', 'categories']):
+        return 'Product Category'
+    elif any(word in question_lower for word in ['brand', 'brands']):
+        return 'Brand'
     elif any(word in question_lower for word in ['country', 'countries']):
         return 'Country'
     elif any(word in question_lower for word in ['state', 'states']):
         return 'State'
     elif any(word in question_lower for word in ['city', 'cities']):
         return 'City'
-    elif any(word in question_lower for word in ['category', 'categories']):
-        return 'Product Category'
-    elif any(word in question_lower for word in ['brand', 'brands']):
-        return 'Brand'
     elif any(word in question_lower for word in ['department', 'dept']):
         return 'Department'
     elif any(word in question_lower for word in ['product', 'products']):
         return 'Product Name'
     elif any(word in question_lower for word in ['customer', 'user', 'buyer']):
         return 'Customer'
+    
+    # Strategy 2: Check question keywords for TIME dimensions (lower priority)
+    elif any(word in question_lower for word in ['quarter', 'quarterly', 'q1', 'q2', 'q3', 'q4']):
+        return 'Quarter'
+    elif any(word in question_lower for word in ['month', 'monthly']):
+        return 'Month'
+    elif any(word in question_lower for word in ['year', 'yearly', 'annual']):
+        return 'Year'
+    elif any(word in question_lower for word in ['day', 'daily', 'date']):
+        return 'Date'
+    elif any(word in question_lower for word in ['week', 'weekly']):
+        return 'Week'
     
     # Strategy 3: Check column name patterns
     import re
@@ -1545,7 +1545,27 @@ def generate_and_show_sql(question: str) -> str:
     """Generate and validate SQL query without executing full analysis."""
     llm = ChatGroq(model=GROQ_MODEL, temperature=0.1, api_key=GROQ_API_KEY)
     
-    # FIX 1: Use actual newlines (\n) in the prompt construction, not literals (\\n)
+    # Clean the question to remove "generate/show sql" phrases
+    cleaned_question = question.lower()
+    
+    # Remove common SQL request phrases
+    patterns_to_remove = [
+        r'^generate\s+(sql\s+)?(query\s+)?(to\s+)?(find\s+)?',
+        r'^show\s+(me\s+)?(the\s+)?(sql\s+)?(query\s+)?(to\s+)?(find\s+)?',
+        r'^create\s+(sql\s+)?(query\s+)?(to\s+)?(find\s+)?',
+        r'^write\s+(sql\s+)?(query\s+)?(to\s+)?(find\s+)?',
+        r'^give\s+(me\s+)?(sql\s+)?(query\s+)?(to\s+)?(find\s+)?',
+    ]
+    
+    for pattern in patterns_to_remove:
+        cleaned_question = re.sub(pattern, '', cleaned_question, flags=re.IGNORECASE)
+    
+    # Capitalize first letter for display
+    cleaned_question = cleaned_question.strip()
+    if cleaned_question and cleaned_question[0].islower():
+        cleaned_question = cleaned_question[0].upper() + cleaned_question[1:]
+    
+    # Use original question for SQL generation, cleaned for display
     sql_prompt = SYSTEM_PROMPT + "\n\nSchema:\n" + schema_snippet + "\n\nQuestion: " + question + "\n\nSQL:"
     
     try:
@@ -1555,8 +1575,8 @@ def generate_and_show_sql(question: str) -> str:
         df = _execute_sql(clean_sql)
         formatted_sql = _format_sql_readable(clean_sql)
         
-        # FIX 2: Use single backslash (\n) for actual line breaks in the output string
-        intro = f"Here's the SQL for \"{question}\"\n\n"
+        # Use cleaned question in the intro
+        intro = f"Here's the SQL for \"{cleaned_question}\"\n\n"
         
         if df.empty:
             return f"{intro}**SQL Query:**\n```sql\n{formatted_sql}\n```\n\n⚠️ Query returns no data."
