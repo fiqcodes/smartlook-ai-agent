@@ -1,9 +1,3 @@
-"""
-TheLook Ecommerce AI Data Analyst Agent - Cloud Version (ENHANCED FORMATTING + CONVERSATIONAL)
-Compatible with langgraph 0.0.26
-UPDATED FOR DEPLOYMENT - FIXED CREDENTIALS
-"""
-
 import logging
 import re
 import warnings
@@ -19,9 +13,7 @@ from google.oauth2 import service_account
 from typing import Literal, TypedDict, Sequence
 import json
 import plotly.graph_objects as go
-import plotly.express as px
 import pandas as pd
-import numpy as np
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -270,14 +262,7 @@ If user says "by country" → use u.country
 DO NOT mix them! Use ONLY what user requested!
 """
 
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
-
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
-
+# Utility Functons
 def _strip_code_fences(sql: str) -> str:
     """Remove markdown code fences and clean up the SQL string"""
     s = sql.strip()
@@ -401,9 +386,7 @@ def _format_as_narrative(df, question: str, row_count: int) -> str:
     df_str = df.head(20).to_string(index=False)
     return f"Based on the data ({row_count} rows):\n\n{df_str}"
 
-# ============================================================================
-# VISUALIZATION FUNCTIONS
-# ============================================================================
+# Visualization Functions
 
 # Custom color palette
 CUSTOM_COLORS = ['#fe5208', '#36cdc3', '#5886e8', '#aae8f4', '#ffc600', '#ff9804']
@@ -505,71 +488,37 @@ def _detect_x_axis_label(x_col: str, question: str, df: pd.DataFrame) -> str:
     sample_values = df[x_col].head(5).astype(str).tolist()
     sample_str = ' '.join(sample_values).lower()
     
-    # Strategy 1: Check for categorical dimensions FIRST (higher priority)
-    if any(word in question_lower for word in ['category', 'categories']):
-        return 'Product Category'
-    elif any(word in question_lower for word in ['brand', 'brands']):
-        return 'Brand'
-    elif any(word in question_lower for word in ['country', 'countries']):
-        return 'Country'
-    elif any(word in question_lower for word in ['state', 'states']):
-        return 'State'
-    elif any(word in question_lower for word in ['city', 'cities']):
-        return 'City'
-    elif any(word in question_lower for word in ['department', 'dept']):
-        return 'Department'
-    elif any(word in question_lower for word in ['product', 'products']):
-        return 'Product Name'
-    elif any(word in question_lower for word in ['customer', 'user', 'buyer']):
-        return 'Customer'
-    
-    # Strategy 2: Check question keywords for TIME dimensions (lower priority)
-    elif any(word in question_lower for word in ['quarter', 'quarterly', 'q1', 'q2', 'q3', 'q4']):
-        return 'Quarter'
-    elif any(word in question_lower for word in ['month', 'monthly']):
-        return 'Month'
-    elif any(word in question_lower for word in ['year', 'yearly', 'annual']):
-        return 'Year'
-    elif any(word in question_lower for word in ['day', 'daily', 'date']):
-        return 'Date'
-    elif any(word in question_lower for word in ['week', 'weekly']):
-        return 'Week'
-    
-    # Strategy 3: Check column name patterns
+    # Strategy 1: Check COLUMN NAME patterns first (highest priority)
     import re
     column_patterns = {
-        r'x_axis': None,  # Generic - use data analysis
+        r'month|monthly': 'Month',
         r'quarter': 'Quarter',
-        r'month': 'Month',
-        r'year': 'Year',
-        r'date|day': 'Date',
+        r'year|yearly': 'Year',
+        r'date|day|created_at': 'Date',
         r'week': 'Week',
-        r'country|nation': 'Country',
-        r'state|province': 'State',
-        r'city|town': 'City',
-        r'category|cat': 'Product Category',
-        r'brand': 'Brand',
-        r'department|dept': 'Department',
-        r'product': 'Product',
-        r'customer|user': 'Customer',
     }
     
     for pattern, label in column_patterns.items():
         if re.search(pattern, x_col_lower):
-            if label:
-                return label
-            # If x_axis, analyze data
-            break
+            return label
     
-    # Strategy 4: Analyze actual data patterns
+    # Strategy 2: Analyze actual DATA patterns (second priority)
     try:
+        # Check if data looks like dates (YYYY-MM-DD format)
+        if re.search(r'\d{4}-\d{2}-\d{2}', sample_str):
+            # Check if question asks for monthly/quarterly/yearly
+            if any(word in question_lower for word in ['month', 'monthly']):
+                return 'Month'
+            elif any(word in question_lower for word in ['quarter', 'quarterly']):
+                return 'Quarter'
+            elif any(word in question_lower for word in ['year', 'yearly', 'annual']):
+                return 'Year'
+            else:
+                return 'Month'  # Default for dates
+        
         # Check if data looks like quarters (Q1, Q2, etc.)
         if any(f'q{i}' in sample_str for i in range(1, 5)):
             return 'Quarter'
-        
-        # Check if data looks like dates (YYYY-MM-DD format)
-        if re.search(r'\d{4}-\d{2}-\d{2}', sample_str):
-            return 'Month'
         
         # Check if data looks like years (4-digit numbers)
         if all(val.isdigit() and len(val) == 4 for val in sample_values if val.isdigit()):
@@ -585,6 +534,36 @@ def _detect_x_axis_label(x_col: str, question: str, df: pd.DataFrame) -> str:
             
     except Exception:
         pass
+    
+    # Strategy 3: Check question keywords for TIME dimensions (only if column/data didn't match)
+    if any(word in question_lower for word in ['month', 'monthly']):
+        return 'Month'
+    elif any(word in question_lower for word in ['quarter', 'quarterly', 'q1', 'q2', 'q3', 'q4']):
+        return 'Quarter'
+    elif any(word in question_lower for word in ['year', 'yearly', 'annual']):
+        return 'Year'
+    elif any(word in question_lower for word in ['day', 'daily', 'date']):
+        return 'Date'
+    elif any(word in question_lower for word in ['week', 'weekly']):
+        return 'Week'
+    
+    # Strategy 4: Check question keywords for CATEGORICAL dimensions (lowest priority)
+    elif any(word in question_lower for word in ['category', 'categories']):
+        return 'Product Category'
+    elif any(word in question_lower for word in ['brand', 'brands']):
+        return 'Brand'
+    elif any(word in question_lower for word in ['country', 'countries']):
+        return 'Country'
+    elif any(word in question_lower for word in ['state', 'states']):
+        return 'State'
+    elif any(word in question_lower for word in ['city', 'cities']):
+        return 'City'
+    elif any(word in question_lower for word in ['department', 'dept']):
+        return 'Department'
+    elif any(word in question_lower for word in ['product', 'products']):
+        return 'Product Name'
+    elif any(word in question_lower for word in ['customer', 'user', 'buyer']):
+        return 'Customer'
     
     # Fallback: Format column name nicely
     cleaned = x_col.replace('_', ' ').replace('-', ' ')
@@ -676,7 +655,7 @@ def _create_stacked_bar_chart(df: pd.DataFrame, question: str) -> dict:
         question_lower = question.lower()
         value_col_lower = value_col.lower()
         
-        # --- Use smart X-axis detection ---
+        # Use smart X-axis detection
         x_axis_label = _detect_x_axis_label(x_col, question, df)
 
         # Smart metric detection using sample values
@@ -716,7 +695,7 @@ def _create_stacked_bar_chart(df: pd.DataFrame, question: str) -> dict:
 
         y_axis_label = f'{metric_name} (%)' if is_percentage else f'{metric_name} ($)' if is_revenue else metric_name
 
-        # --- Formatting Setup based on detection ---
+        # Formatting Setup based on detection
         if is_percentage:
             y_tickformat = ',.1%'
             hover_format = '%{y:.1%}'
@@ -734,7 +713,6 @@ def _create_stacked_bar_chart(df: pd.DataFrame, question: str) -> dict:
             hover_format = '%{y:,.2f}'
             text_template = '%{text:.2f}'
 
-        # --- CRITICAL FIX: Get ALL unique x-axis values BEFORE pivoting ---
         all_x_values = df[x_col].unique()
         
         # Sort x-axis values properly
@@ -756,7 +734,7 @@ def _create_stacked_bar_chart(df: pd.DataFrame, question: str) -> dict:
             # If sorting fails, keep original order
             pass
 
-        # --- Pivot and Filter Data ---
+        # Pivot and Filter Data
         pivot_df = df.pivot_table(
             index=x_col, 
             columns=stack_col, 
@@ -765,7 +743,6 @@ def _create_stacked_bar_chart(df: pd.DataFrame, question: str) -> dict:
             fill_value=0
         )
         
-        # --- CRITICAL FIX: Reindex to include ALL x-axis values ---
         pivot_df = pivot_df.reindex(all_x_values, fill_value=0)
         
         # Select top categories by total value
@@ -778,7 +755,7 @@ def _create_stacked_bar_chart(df: pd.DataFrame, question: str) -> dict:
             pivot_df = pivot_df.apply(lambda x: x / x.sum() if x.sum() > 0 else x, axis=1)
             pivot_df = pivot_df.fillna(0) 
             
-        # --- Chart Creation ---
+        # Chart Creation
         fig = go.Figure()
         
         colors = get_color_palette(len(pivot_df.columns))
@@ -797,7 +774,7 @@ def _create_stacked_bar_chart(df: pd.DataFrame, question: str) -> dict:
                 textfont=dict(size=10, color='white')
             ))
         
-        # --- Layout ---
+        # Layout
         fig.update_layout(
             title=question,
             xaxis_title=x_axis_label,
@@ -1119,9 +1096,7 @@ def _create_cohort_heatmap(df: pd.DataFrame, question: str) -> dict:
         logger.error(f"Cohort heatmap error: {str(e)}")
         return {"error": f"Failed to create cohort heatmap: {str(e)}"}
 
-# ============================================================================
-# TOOL IMPLEMENTATIONS
-# ============================================================================
+# Tool Implementations
 
 @tool
 def chat_with_user(message: str) -> str:
@@ -1309,7 +1284,7 @@ def create_visualization(question: str, chart_type: str = None) -> str:
         return json.dumps(error_response)
     
 @tool
-def create_cohort_analysis(question: str, year: int = None, category: str = None, product: str = None, brand: str = None) -> str:
+def create_cohort_analysis(question: str, year: int = None, category: str = None, product: str = None, brand: str = None, country: str = None) -> str:
     """Create cohort retention analysis and heatmap visualization. 
     Use this for cohort analysis, retention analysis, or user lifecycle questions.
     
@@ -1319,6 +1294,7 @@ def create_cohort_analysis(question: str, year: int = None, category: str = None
         category: Optional product category filter (e.g., "Intimates", "Jeans", "Outerwear & Coats")
         product: Optional product name filter
         brand: Optional brand filter (e.g., "Calvin Klein")
+        country: Optional country name filter (e.g, "China", "United States", "Brazil")
     """
 
     # Build WHERE clause filters with proper SQL escaping
@@ -1337,6 +1313,10 @@ def create_cohort_analysis(question: str, year: int = None, category: str = None
     if product:
         escaped_product = str(product).strip().replace("'", "''")
         filter_lines.append(f"        AND p.name LIKE '%{escaped_product}%'")
+
+    if country:
+        escaped_country = str(country).strip().replace("'", "''")
+        filter_lines.append(f"        AND u.country = '{escaped_country}'")
     
     if brand:
         escaped_brand = str(brand).strip().replace("'", "''")
@@ -1345,7 +1325,6 @@ def create_cohort_analysis(question: str, year: int = None, category: str = None
     filter_clause = "\n".join(filter_lines) if filter_lines else ""
     
     # Enhanced cohort query with proper table joins
-    # FIXED: Using proper string formatting without \n escapes
     cohort_query = f"""
     WITH first_purchase AS (
       SELECT
@@ -1356,6 +1335,8 @@ def create_cohort_analysis(question: str, year: int = None, category: str = None
         ON o.order_id = oi.order_id
       JOIN `bigquery-public-data.thelook_ecommerce.products` p
         ON oi.product_id = p.id
+      JOIN `bigquery-public-data.thelook_ecommerce.users` u
+        ON o.user_id = u.id
       WHERE o.status = 'Complete'{filter_clause}
       GROUP BY o.user_id
     ),
@@ -1369,6 +1350,8 @@ def create_cohort_analysis(question: str, year: int = None, category: str = None
         ON o.order_id = oi.order_id
       JOIN `bigquery-public-data.thelook_ecommerce.products` p
         ON oi.product_id = p.id
+      JOIN `bigquery-public-data.thelook_ecommerce.users` u
+        ON o.user_id = u.id
       WHERE o.status = 'Complete'{filter_clause}
       GROUP BY o.user_id, activity_month
     ),
@@ -1420,6 +1403,8 @@ def create_cohort_analysis(question: str, year: int = None, category: str = None
                 filter_desc.append(f"product '{product}'")
             if brand:
                 filter_desc.append(f"brand '{brand}'")
+            if country:
+                filter_desc.append(f"country '{country}'")
             
             filter_text = " with filters: " + ", ".join(filter_desc) if filter_desc else ""
             
@@ -1457,6 +1442,8 @@ def create_cohort_analysis(question: str, year: int = None, category: str = None
             filter_desc.append(f"product '{product}'")
         if brand:
             filter_desc.append(f"brand '{brand}'")
+        if country:
+            filter_desc.append(f"country '{country}'")
         
         filter_text = " for " + ", ".join(filter_desc) if filter_desc else ""
         
@@ -1525,7 +1512,8 @@ CRITICAL:
             "year": year,
             "category": category,
             "product": product,
-            "brand": brand
+            "brand": brand,
+            "country": country
         }
 
         viz_result["source_data"] = df.astype(str).to_dict(orient='records')
@@ -1585,10 +1573,7 @@ def generate_and_show_sql(question: str) -> str:
     except Exception as e:
         return f"❌ Error: {str(e)[:300]}"
 
-# ============================================================================
-# AGENTIC WORKFLOW - Without Native Function Calling
-# ============================================================================
-
+# Agent Workflow
 tools = [chat_with_user, answer_ecommerce_question, create_visualization, create_cohort_analysis, generate_and_show_sql]
 tools_by_name = {tool.name: tool for tool in tools}
 
@@ -1848,10 +1833,7 @@ workflow.add_edge("tool_node", END)
 
 agent_executor = workflow.compile()
 
-# ============================================================================
-# PUBLIC API
-# ============================================================================
-
+# Public API
 def ask(question: str) -> str:
     """Ask a question to the AI agent"""
     try:

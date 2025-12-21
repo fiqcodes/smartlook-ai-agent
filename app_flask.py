@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import logging
@@ -205,18 +205,5 @@ if __name__ == '__main__':
     
     # Run the app on port 8000 (avoiding macOS AirPlay on 5000)
     port = int(os.environ.get('PORT', 8000))
-    
-    print("\n" + "="*80)
-    print("🚀 SmartLook")
-    print("="*80)
-    print(f"📍 URL: http://localhost:{port}")
-    print(f"💬 Memory: Enabled (tracks last 10 exchanges)")
-    print(f"🧠 Context-aware follow-ups: Active")
-    print("\n💡 API Endpoints:")
-    print(f"   POST /api/chat         - Send messages")
-    print(f"   POST /api/clear        - Clear conversation history")
-    print(f"   GET  /api/history      - View conversation history")
-    print(f"   GET  /api/health       - Check system health")
-    print("="*80 + "\n")
     
     app.run(host='0.0.0.0', port=port, debug=True)
