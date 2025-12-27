@@ -500,6 +500,85 @@
             margin-bottom: -20px;
         }
 
+        /* SQL Toggle Styles */
+        .sql-toggle-container {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .sql-toggle-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: transparent;
+            border: none;
+            color: #2b85ffff;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 8px 0;
+        }
+        .sql-toggle-btn:hover {
+            color: #2563eb;
+        }
+        .sql-toggle-icon {
+            transition: transform 0.2s;
+        }
+        .sql-toggle-btn.active .sql-toggle-icon {
+            transform: rotate(90deg);
+        }
+        .sql-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            position: relative;
+        }
+        .sql-content.show {
+            max-height: none;
+            overflow: visible;
+        }
+
+        .sql-code-wrapper {
+            position: relative;
+            overflow: auto;
+            max-height: 500px;
+        }
+
+        .copy-code-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 6px 12px;
+            background: rgba(43, 133, 255, 0.1);
+            color: #2b85ffff;
+            border: 1px solid rgba(43, 133, 255, 0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+            z-index: 10;
+        }
+
+        .copy-code-btn:hover {
+            background: rgba(43, 133, 255, 0.2);
+            border-color: #2b85ffff;
+        }
+
+        .copy-code-btn.copied {
+            background: rgba(34, 197, 94, 0.1);
+            color: #16a34a;
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+
+        .sql-code-wrapper pre {
+            margin: 0;
+            padding: 48px 12px 12px 12px; /* Add top padding to prevent text hiding under button */
+        }
+
         /* NEW: Visualization Styles */
         .visualization-container {
             margin: 20px 0;
@@ -864,7 +943,7 @@
                             <div class="example-title">Customer Retention</div>
                             <div class="example-text">Discover customer retention using specific filters</div>
                         </div>
-                        <div class="example-card" onclick="sendExample('Show the monthly revenue trend in 2025')">
+                        <div class="example-card" onclick="sendExample('Show the monthly revenue trend in 2025 in the form of a line chart')">
                             <div class="example-title">Performance Trend</div>
                             <div class="example-text">Analyze revenue performance trends across timeframes</div>
                         </div>
@@ -1089,6 +1168,33 @@
             responseTextDiv.innerHTML = formatMessage(dataResponse.response_text || dataResponse.response || '');
             contentDiv.appendChild(responseTextDiv);
             
+            // Add collapsible SQL section if available
+            if (dataResponse.sql) {
+                const sqlSection = document.createElement('div');
+                sqlSection.className = 'sql-toggle-container';
+                sqlSection.innerHTML = `
+                    <button class="sql-toggle-btn" onclick="toggleSQL(this)">
+                        <svg class="sql-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                        View generated SQL
+                    </button>
+                    <div class="sql-content">
+                        <div class="sql-code-wrapper">
+                            <button class="copy-code-btn" onclick="copySQLCode(this)">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                                Copy code
+                            </button>
+                            <pre><code>${dataResponse.sql}</code></pre>
+                        </div>
+                    </div>
+                `;
+                contentDiv.appendChild(sqlSection);
+            }
+            
             contentWrapper.appendChild(header);
             contentWrapper.appendChild(contentDiv);
             messageDiv.appendChild(avatar);
@@ -1097,6 +1203,12 @@
             
             const chatContainer = document.getElementById('chatContainer');
             chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function toggleSQL(button) {
+            const content = button.nextElementSibling;
+            button.classList.toggle('active');
+            content.classList.toggle('show');
         }
 
         // NEW: Add visualization message with Plotly chart
@@ -1149,19 +1261,15 @@
                 // Remove emojis from title
                 const cleanTitle = (vizData.question || 'Data Visualization').replace(/[\u{1F300}-\u{1F9FF}]/gu, '').trim();
                 
-                titleWrapper.innerHTML = `
-                    <span class="visualization-title">${cleanTitle}</span>
-                `;
+                titleWrapper.innerHTML = ``;
                 
                 const downloadBtn = document.createElement('button');
                 downloadBtn.className = 'download-chart-btn';
                 downloadBtn.innerHTML = `
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                        <polyline points="10 9 9 9 8 9"></polyline>
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
                     </svg>
                     Download PNG
                 `;
@@ -1231,9 +1339,30 @@
                 }
                 
                 // Add SQL query if available (only once at the end)
+                // Add SQL query if available (only once at the end)
                 if (vizData.sql) {
                     const sqlSection = document.createElement('div');
-                    sqlSection.innerHTML = `<br><strong>SQL Query:</strong><pre><code>${vizData.sql}</code></pre>`;
+                    sqlSection.className = 'sql-toggle-container';
+                    sqlSection.innerHTML = `
+                        <button class="sql-toggle-btn" onclick="toggleSQL(this)">
+                            <svg class="sql-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                            View generated SQL
+                        </button>
+                        <div class="sql-content">
+                            <div class="sql-code-wrapper">
+                                <button class="copy-code-btn" onclick="copySQLCode(this)">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                    Copy code
+                                </button>
+                                <pre><code>${vizData.sql}</code></pre>
+                            </div>
+                        </div>
+                    `;
                     contentDiv.appendChild(sqlSection);
                 }
                 
@@ -1249,27 +1378,29 @@
                             height: 500,
                             xaxis: {
                                 ...chartData.layout.xaxis,
-                                tickangle: 0,  // Straight numbers instead of -45 degrees
+                                tickangle: 0,
                                 automargin: true,
                                 tickfont: {
                                     size: 12
-                                }
+                                },
+                                showspikes: false  // Add this line
                             },
                             yaxis: {
                                 ...chartData.layout.yaxis,
-                                automargin: true
+                                automargin: true,
+                                showspikes: false  // Add this line
                             },
                             margin: {
                                 l: 80,
                                 r: 20,
-                                t: 40,
+                                t: 20,
                                 b: 80
                             }
                         };
                         
                         Plotly.newPlot(chartId, chartData.data, layout, {
                             responsive: true,
-                            displayModeBar: true,
+                            displayModeBar: false,
                             modeBarButtonsToRemove: ['toImage', 'lasso2d', 'select2d'],
                             displaylogo: false
                         });
@@ -1560,6 +1691,29 @@
                 console.error('Error getting backend history:', error);
                 return null;
             }
+        }
+
+        function copySQLCode(button) {
+            const codeElement = button.parentElement.querySelector('code');
+            const sqlCode = codeElement.textContent;
+            
+            navigator.clipboard.writeText(sqlCode).then(() => {
+                const originalHTML = button.innerHTML;
+                button.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    Copied!
+                `;
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.innerHTML = originalHTML;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
         }
 
         function downloadCSV(data, filename) {

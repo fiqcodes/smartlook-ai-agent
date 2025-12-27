@@ -11,3 +11,4 @@ plotly==5.18.0
 kaleido==0.2.1
 gunicorn==21.2.0
 google-auth==2.23.0
+sqlparse==0.4.4

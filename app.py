@@ -3,7 +3,7 @@ from flask_cors import CORS
 import os
 import logging
 import json
-from agent_cloud import ask, check_connection, clear_history, get_conversation_history, get_last_tool_call
+from agent import ask, check_connection, clear_history, get_conversation_history, get_last_tool_call
 
 # Configure logging
 logging.basicConfig(
@@ -59,7 +59,7 @@ def chat():
                 # Generate analysis text for visualizations (if not already present)
                 if not visualization_data.get('error') and not visualization_data.get('response_text'):
                     # Import the tool directly
-                    from agent_cloud import answer_ecommerce_question
+                    from agent import answer_ecommerce_question
                     
                     # Get the original question
                     question = visualization_data.get('question', message)
@@ -88,7 +88,7 @@ def chat():
                 logger.warning("Failed to parse visualization JSON")
         
         # NEW: Check if tool is answer_ecommerce_question (data response with CSV)
-        elif tool_call and tool_call['name'] == 'answer_ecommerce_question':
+        elif tool_call and tool_call['name'] in ['answer_ecommerce_question', 'generate_and_show_sql']:
             try:
                 data_response = json.loads(response)
                 if data_response.get('is_data_response'):
@@ -182,7 +182,6 @@ def serve_assets(filename):
 
 @app.errorhandler(404)
 def not_found(e):
-    """Handle 404 errors"""
     return jsonify({
         'error': 'Endpoint not found',
         'status': 'error'
@@ -190,7 +189,6 @@ def not_found(e):
 
 @app.errorhandler(500)
 def internal_error(e):
-    """Handle 500 errors"""
     logger.error(f"Internal server error: {str(e)}")
     return jsonify({
         'error': 'Internal server error',

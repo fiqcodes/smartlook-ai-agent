@@ -315,7 +315,6 @@ def _is_safe_sql_internal(sql: str) -> bool:
     sql_lower = sql.lower()
     
     # Check for dangerous keywords at word boundaries
-    # FIXED: Changed \\b to \b here as well
     dangerous_patterns = [
         r'\bdrop\b', r'\bdelete\b', r'\binsert\b', r'\bupdate\b', 
         r'\balter\b', r'\bcreate\b', r'\btruncate\b', r'\bgrant\b',
@@ -329,11 +328,59 @@ def _is_safe_sql_internal(sql: str) -> bool:
     return True
 
 def _format_sql_readable(sql: str) -> str:
-    s = sql.strip()
-    for kw in ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'JOIN', 'LEFT JOIN', 'INNER JOIN']:
-        # FIXED: Changed \\s and \\n to \s and \n
-        s = re.sub(rf'\s+({kw})\s+', rf'\n{kw} ', s, flags=re.IGNORECASE)
-    return s
+    import re
+    import sqlparse
+    
+    sql = re.sub(
+        r'(WITH\s+\w+|\),\s*\w+)\s+AS\s*\n\s*\(',
+        lambda m: m.group(0).replace('\n', ' ').replace('  ', ' ').replace(' AS (', ' AS ('),
+        sql,
+        flags=re.IGNORECASE
+    )
+
+    s = sqlparse.format(
+        sql,
+        keyword_case='upper',
+        reindent=True,
+        indent_width=2,
+        use_space_around_operators=True
+    )
+
+    s = re.sub(
+        r'\s+(AND|OR)\s+',
+        r'\n    \1 ',
+        s
+    )
+
+    def format_select(match):
+        body = match.group(1)
+        cols = [c.strip() for c in body.split(',')]
+        return 'SELECT\n  ' + ',\n  '.join(cols) + '\nFROM'
+
+    s = re.sub(
+        r'SELECT\s+(.*?)\s+FROM',
+        format_select,
+        s,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    s = re.sub(
+        r'\),\s*(\w+\s+AS\s+\()',
+        r'),\n\n\1',
+        s,
+        flags=re.IGNORECASE
+    )
+
+    s = re.sub(
+        r'\)\s*\nSELECT',
+        r')\n\nSELECT',
+        s,
+        flags=re.IGNORECASE
+    )
+
+    s = re.sub(r'[ \t]{2,}', ' ', s)
+
+    return s.strip()
 
 def _execute_sql(sql: str):
     if not _is_safe_sql_internal(sql):
@@ -788,7 +835,9 @@ def _create_stacked_bar_chart(df: pd.DataFrame, question: str) -> dict:
                 bgcolor="rgba(255, 255, 255, 0.8)", bordercolor="rgba(0, 0, 0, 0.2)", borderwidth=1
             ),
             height=500,
-            margin=dict(r=150)
+            margin=dict(r=150),
+            xaxis=dict(showspikes=False),
+            yaxis=dict(showspikes=False)
         )
         
         # Apply Y-axis formatting based on detection
@@ -880,7 +929,9 @@ def _create_visualization(df: pd.DataFrame, question: str, chart_type: str = Non
                 yaxis_title=y_axis_label,
                 template='plotly_white',
                 hovermode='x',
-                showlegend=False
+                showlegend=False,
+                xaxis=dict(showspikes=False),
+                yaxis=dict(showspikes=False)
             )
             fig.update_yaxes(tickformat=y_tickformat)
             
@@ -890,8 +941,8 @@ def _create_visualization(df: pd.DataFrame, question: str, chart_type: str = Non
                     x=df_viz[x_col],
                     y=df_viz[y_col],
                     mode='lines+markers',
-                    line=dict(color=CUSTOM_COLORS[0], width=3),  # #fe5208 (orange-red)
-                    marker=dict(size=8, color=CUSTOM_COLORS[0]),  # #fe5208 (orange-red)
+                    line=dict(color=CUSTOM_COLORS[0], width=3),
+                    marker=dict(size=8, color=CUSTOM_COLORS[0]),
                     hovertemplate=f'<b>%{{x}}</b><br>{y_axis_label}: {hover_format}<extra></extra>'
                 )
             ])
@@ -900,7 +951,9 @@ def _create_visualization(df: pd.DataFrame, question: str, chart_type: str = Non
                 xaxis_title=x_axis_label,
                 yaxis_title=y_axis_label,
                 template='plotly_white',
-                hovermode='x'
+                hovermode='x',
+                xaxis=dict(showgrid=True),
+                yaxis=dict(showgrid=True) 
             )
             fig.update_yaxes(tickformat=y_tickformat)
             
@@ -1171,9 +1224,9 @@ Format your response EXACTLY like this:
 
 **Key Insights:**
 
-- [First key insight - wrap important keywords in **bold**]
-- [Second insight - wrap important numbers/terms in **bold**]
-- [Third insight - wrap key findings in **bold**]
+[First key insight - wrap important keywords in **bold**]
+[Second insight - wrap important numbers/terms in **bold**]
+[Third insight - wrap key findings in **bold**]
 
 **Actionable Recommendations:**
 
@@ -1200,8 +1253,8 @@ CRITICAL:
             analysis = df_str
         
         formatted_sql = _format_sql_readable(clean_sql)
-        response_text = f"{analysis}\n\n**SQL Query:**\n```sql\n{formatted_sql}\n```"
-        
+        response_text = analysis
+
         # Return JSON with source data for CSV download
         return json.dumps({
             "is_data_response": True,
@@ -1475,9 +1528,9 @@ Format your response EXACTLY like this:
 
 **Key Insights:**
 
-- [First key insight - wrap important keywords in **bold**]
-- [Second insight - wrap important numbers/terms in **bold**]
-- [Third insight - wrap key findings in **bold**]
+[First key insight - wrap important keywords in **bold**]
+[Second insight - wrap important numbers/terms in **bold**]
+[Third insight - wrap key findings in **bold**]
 
 **Actionable Recommendations:**
 
@@ -1563,15 +1616,33 @@ def generate_and_show_sql(question: str) -> str:
         df = _execute_sql(clean_sql)
         formatted_sql = _format_sql_readable(clean_sql)
         
-        # Use cleaned question in the intro
-        intro = f"Here's the SQL for \"{cleaned_question}\"\n\n"
+        # Return JSON format similar to answer_ecommerce_question
+        intro = f"Here's the SQL for \"{cleaned_question}\""
         
         if df.empty:
-            return f"{intro}**SQL Query:**\n```sql\n{formatted_sql}\n```\n\n⚠️ Query returns no data."
+            return json.dumps({
+                "is_data_response": True,
+                "response_text": f"{intro}\n\nâš ï¸ Query returns no data.",
+                "sql": formatted_sql,
+                "source_data": None,
+                "row_count": 0
+            })
         
-        return f"{intro}**SQL Query:**\n```sql\n{formatted_sql}\n```\n\n**Validated** - returns {len(df)} rows."
+        return json.dumps({
+            "is_data_response": True,
+            "response_text": f"{intro}\n\n**Validated** - returns {len(df)} rows.",
+            "sql": formatted_sql,
+            "source_data": None,
+            "row_count": len(df)
+        })
     except Exception as e:
-        return f"❌ Error: {str(e)[:300]}"
+        return json.dumps({
+            "is_data_response": True,
+            "response_text": f"âŒ Error: {str(e)[:300]}",
+            "sql": None,
+            "source_data": None,
+            "row_count": 0
+        })
 
 # Agent Workflow
 tools = [chat_with_user, answer_ecommerce_question, create_visualization, create_cohort_analysis, generate_and_show_sql]
