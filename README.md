@@ -5,7 +5,6 @@ A GenBI and Text-to-SQL Agent built using LangGraph, few-shot learning, and stru
 <div align="center">
 
 ![LangGraph](https://img.shields.io/badge/LangGraph-0.0.26-FF6B6B?style=for-the-badge&logo=langchain&logoColor=white)
-![LangChain](https://img.shields.io/badge/LangChain-Core-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-3.0.0-000000?style=for-the-badge&logo=flask&logoColor=white)
 ![Plotly](https://img.shields.io/badge/Plotly-5.18.0-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)
@@ -153,35 +152,26 @@ sqlparse==0.4.4
 
 ### Example 1: Natural Language Query
 <img src="templates/assets/analysis_question.png" width="100%"/>
-```
-User: "What are the top 5 best-selling products?"
 
+User: "What are the top 5 best-selling products?"
 SmartLook: Generates SQL query, executes it, and presents results with insights
-```
 
 ### Example 2: Trend Analysis
 <img src="templates/assets/line_chart.png" width="100%"/>
-```
-User: "Show the monthly revenue trend in 2025 in the form of a line chart"
 
+User: "Show the monthly revenue trend in 2025 in the form of a line chart"
 SmartLook: Creates visualization and identifies key patterns
-```
 
 ### Example 3: Complex Analysis
 <img src="templates/assets/cohort.png" width="100%"/>
-```
-User: "Perform a cohort-based user retention analysis in 2025"
 
+User: "Perform a cohort-based user retention analysis in 2025"
 SmartLook: Performs cohort analysis and detects patterns with actionable recommendations
-```
 
 ### Example 4: SQL Generation
 <img src="templates/assets/sql.png" width="100%"/>
-```
 User: "Show me the SQL query to find the best-selling product in 2025"
-
 SmartLook: Generates SQL query based on user request and validates it
-```
 
 ## Features in Detail
 
