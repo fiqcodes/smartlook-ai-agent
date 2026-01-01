@@ -152,9 +152,9 @@ sqlparse==0.4.4
 <img src="templates/assets/analysis_question.png" width="100%"/>
 
 ### Example 2: Trend Analysis
-- User: "Show the monthly revenue trend in 2025 in the form of a line chart"
+- User: "Create a stacked bar chart of quarterly revenue share by the top 5 countries in 2025"
 - SmartLook: Creates visualization and identifies key patterns
-<img src="templates/assets/line_chart.png" width="100%"/>
+<img src="templates/assets/stackedbar_chart.png" width="100%"/>
 
 ### Example 3: Complex Analysis
 - User: "Perform a cohort-based user retention analysis in 2025"
