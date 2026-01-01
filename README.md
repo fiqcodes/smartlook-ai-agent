@@ -1,28 +1,44 @@
 # SmartLook AI Agent
 
-An AI-powered Data Analyst and SQL Agent built using LangGraph, few-shot learning, and structured reasoning flows.
+A GenBI and Text-to-SQL Agent built using LangGraph, few-shot learning, and structured reasoning flows.
 
-## Screenshot
+<div align="center">
 
-<img src="templates/assets/ss_ui.png" alt="SmartLook UI Demo" width="100%"/>
+![LangGraph](https://img.shields.io/badge/LangGraph-0.0.26-FF6B6B?style=for-the-badge&logo=langchain&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-Core-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.0.0-000000?style=for-the-badge&logo=flask&logoColor=white)
+![Plotly](https://img.shields.io/badge/Plotly-5.18.0-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)
+![BigQuery](https://img.shields.io/badge/BigQuery-Cloud-669DF6?style=for-the-badge&logo=googlebigquery&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq-LLM-FF6B35?style=for-the-badge)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
+![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
 
-<img src="templates/assets/ss_chat.png" alt="SmartLook Chat Demo" width="100%"/>
+</div>
+
+## Demo
+
+<video src="templates/assets/smartlook_demo.mp4" controls width="100%">
+  Your browser does not support the video tag.
+</video>
 
 ## Overview
 
-**SmartLook** is an intelligent data analysis system that analyzes datasets from an e-commerce company, detects trends, and generates accurate SQL queries to support business analysis tasks. The system features an intuitive React interface that accelerates insight generation, automates exploratory analysis, and reduces manual effort for analysts.
+**SmartLook** is a generative business intelligence and text-to-SQL agent that analyzes datasets from an e-commerce company, detects trends, and generates accurate SQL queries and visualizations to support business analysis tasks. The system features an intuitive React interface that accelerates insight generation, automates exploratory analysis, and reduces manual effort for analysts.
 
-Try it out here: [SmartLook AI Agent](https://smartlook.up.railway.app/)
+Try it out here: [SmartLook AI Agent](https://smartlook-ai-agent--rafiqkastara7.replit.app/)
 
 ## Key Features
 
 - **AI-Powered Analysis**: Leverages LangGraph for structured reasoning and decision-making
 - **Automated SQL Generation**: Creates accurate SQL queries using few-shot learning techniques
-- **Trend Detection**: Identifies patterns and anomalies in e-commerce data
+- **Interactive Visualizations**: Creates dynamic charts and graphs with Plotly.js
 - **Fast Insights**: Accelerates data exploration and reduces manual analysis time
-- **React Interface**: Modern, intuitive UI for seamless interaction
+- **Modern Web Interface**: Clean, intuitive UI built with vanilla JavaScript for seamless interaction
 - **BigQuery Integration**: Direct connection to Google Cloud BigQuery for scalable data processing
 - **Conversational AI**: Natural language interface for data queries
+- **Export Capabilities**: Download visualizations as PNG and data as CSV for further analysis
 
 ## Architecture
 
@@ -42,10 +58,13 @@ SmartLook uses a multi-agent architecture powered by LangGraph:
 - **LangChain Groq 0.1.0** - Fast LLM inference
 - **Google Cloud BigQuery 3.15.0** - Cloud data warehouse
 - **Pandas 2.2.3** - Data manipulation and analysis
+- **Plotly 5.18.0** - Interactive data visualizations
 
 ### Frontend
-- **React** - Modern UI framework
-- **JavaScript/TypeScript** - Frontend logic
+- **Vanilla JavaScript** - Interactive frontend logic
+- **HTML5** - Semantic markup structure
+- **CSS3** - Modern styling with gradients and animations
+- **Plotly.js** - Interactive data visualizations
 
 ### Infrastructure
 - **Gunicorn 21.2.0** - Production WSGI server
@@ -53,7 +72,6 @@ SmartLook uses a multi-agent architecture powered by LangGraph:
 - **Google Auth 2.23.0** - Authentication for GCP services
 
 ## Project Structure
-
 ```
 smartlook-ai-agent/
 │
@@ -61,7 +79,7 @@ smartlook-ai-agent/
 │   ├── assets/                   # Static assets (CSS, JS, images)
 │   └── index.html                # Main frontend interface
 │
-├── agent_cloud.py                # AI agent implementation
+├── agent.py                      # AI agent implementation
 ├── app_flask.py                  # Flask application
 ├── requirements.txt              # Python dependencies
 ├── Procfile                      # Deployment configuration
@@ -114,7 +132,6 @@ python app_flask.py
 The application will be available at `http://localhost:5000`
 
 ## Requirements
-
 ```txt
 flask==3.0.0
 flask-cors==4.0.0
@@ -123,32 +140,47 @@ langchain-core==0.1.40
 langgraph==0.0.26
 google-cloud-bigquery==3.15.0
 pandas==2.2.3
+requests==2.31.0
 db-dtypes==1.1.1
+plotly==5.18.0
+kaleido==0.2.1
 gunicorn==21.2.0
 google-auth==2.23.0
+sqlparse==0.4.4
 ```
 
 ## Usage Examples
 
 ### Example 1: Natural Language Query
+<img src="templates/assets/analysis_question.png" width="100%"/>
 ```
-User: "What were the top 5 selling products last month?"
+User: "What are the top 5 best-selling products?"
 
 SmartLook: Generates SQL query, executes it, and presents results with insights
 ```
 
 ### Example 2: Trend Analysis
+<img src="templates/assets/line_chart.png" width="100%"/>
 ```
-User: "Show me the revenue trend for the past quarter"
+User: "Show the monthly revenue trend in 2025 in the form of a line chart"
 
 SmartLook: Creates visualization and identifies key patterns
 ```
 
 ### Example 3: Complex Analysis
+<img src="templates/assets/cohort.png" width="100%"/>
 ```
-User: "Analyze customer churn by product category"
+User: "Perform a cohort-based user retention analysis in 2025"
 
-SmartLook: Performs multi-step analysis with actionable recommendations
+SmartLook: Performs cohort analysis and detects patterns with actionable recommendations
+```
+
+### Example 4: SQL Generation
+<img src="templates/assets/sql.png" width="100%"/>
+```
+User: "Show me the SQL query to find the best-selling product in 2025"
+
+SmartLook: Generates SQL query based on user request and validates it
 ```
 
 ## Features in Detail
@@ -164,6 +196,7 @@ LangGraph enables step-by-step reasoning:
 - Query understanding
 - Data source identification
 - SQL generation
+- Data visualization
 - Result validation
 - Insight extraction
 
@@ -180,17 +213,6 @@ Robust error handling and recovery:
 - **Faster insights** for data-driven decision making
 - **Automated analysis** of recurring business questions
 - **Democratized data access** for non-technical stakeholders
-
-## Future Enhancements
-
-- [ ] Multi-database support (PostgreSQL, MySQL, Snowflake)
-- [ ] Advanced visualization capabilities
-- [ ] Scheduled report generation
-- [ ] Natural language to dashboard creation
-- [ ] Voice-activated queries
-- [ ] Integration with BI tools (Tableau, Power BI)
-- [ ] Custom agent training for specific domains
-- [ ] Collaborative analysis features
 
 ## Security
 
@@ -210,17 +232,6 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Author
-
-**Rafiq Naufal**
-
-- GitHub: [@RafiqNaufal](https://github.com/RafiqNaufal)
-- Portfolio: [Data Analyst Portfolio](https://rafiqnaufal.github.io/DataAnalystPortfolio/)
-
 ## Acknowledgments
 
 - LangChain team for the excellent LLM framework
@@ -234,8 +245,12 @@ For questions, issues, or feature requests:
 - Open an issue on GitHub
 - Start a discussion in the repository
 
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
 ---
 
-If you find SmartLook useful, please consider giving it a star!
+If you find SmartLook useful, please consider giving it a star! ⭐
 
-**Built with dedication for data analysts everywhere**
+**Built with dedication for data analysts everywhere** 🚀
