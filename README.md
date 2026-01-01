@@ -18,7 +18,7 @@ A GenBI and Text-to-SQL Agent built using LangGraph, few-shot learning, and stru
 
 ## Demo
 
-https://github.com/user-attachments/assets/ef548189-01e9-4efe-bcd1-d3e07ff65bab
+https://github.com/user-attachments/assets/da746a68-1a64-404e-8b11-ed9349c14a3f
 
 ## Overview
 
@@ -149,31 +149,24 @@ sqlparse==0.4.4
 ## Usage Examples
 
 ### Example 1: Natural Language Query
+- User: "What are the top 5 best-selling products?"
+- SmartLook: Generates SQL query, executes it, and presents results with insights
 <img src="templates/assets/analysis_question.png" width="100%"/>
 
-- User: "What are the top 5 best-selling products?"
-
-- SmartLook: Generates SQL query, executes it, and presents results with insights
-
 ### Example 2: Trend Analysis
+- User: "Show the monthly revenue trend in 2025 in the form of a line chart"
+- SmartLook: Creates visualization and identifies key patterns
 <img src="templates/assets/line_chart.png" width="100%"/>
 
-- User: "Show the monthly revenue trend in 2025 in the form of a line chart"
-
-- SmartLook: Creates visualization and identifies key patterns
-
 ### Example 3: Complex Analysis
+- User: "Perform a cohort-based user retention analysis in 2025"
+- SmartLook: Performs cohort analysis and detects patterns with actionable recommendations
 <img src="templates/assets/cohort.png" width="100%"/>
 
-- User: "Perform a cohort-based user retention analysis in 2025"
-
-- SmartLook: Performs cohort analysis and detects patterns with actionable recommendations
-
 ### Example 4: SQL Generation
-<img src="templates/assets/sql.png" width="100%"/>
-
 - User: "Show me the SQL query to find the best-selling product in 2025"
 - SmartLook: Generates SQL query based on user request and validates it
+<img src="templates/assets/sql.png" width="100%"/>
 
 ## Features in Detail
 
