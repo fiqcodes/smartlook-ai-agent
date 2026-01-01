@@ -1,7 +1,5 @@
 # SmartLook AI Agent
 
-A GenBI and Text-to-SQL Agent built using LangGraph, few-shot learning, and structured reasoning flows.
-
 <div align="center">
 
 ![LangGraph](https://img.shields.io/badge/LangGraph-0.0.26-FF6B6B?style=for-the-badge&logo=langchain&logoColor=white)
