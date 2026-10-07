@@ -1,207 +1,232 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
-import os
-import logging
+"""SmartLook Flask entrypoint for local development and Vercel."""
+import hashlib
+import hmac
 import json
-from agent import ask, check_connection, clear_history, get_conversation_history, get_last_tool_call
+import logging
+import os
+import re
+import secrets
+from datetime import timedelta
+from urllib.parse import urlsplit
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+from dotenv import load_dotenv
+from flask import Flask, jsonify, redirect, render_template, request, session, send_from_directory
+from werkzeug.exceptions import HTTPException
+
+load_dotenv('.env.local')
+
+from storage import configured_store, ConversationBusy, StorageUnavailable
+
 logger = logging.getLogger(__name__)
+REQUIRED_AI_ENV = ('GROQ_API_KEY', 'GOOGLE_CLOUD_PROJECT')
 
-app = Flask(__name__, 
-            static_folder='static',
-            template_folder='templates')
+def ai_configured():
+    return all(os.getenv(key) for key in REQUIRED_AI_ENV) and bool(
+        os.getenv('GCP_SERVICE_ACCOUNT_JSON') or os.getenv('GCP_SERVICE_ACCOUNT')
+    )
+CID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]{1,64}$')
+MAX_RESPONSE_BYTES = 3_500_000
 
-# Enable CORS for all routes
-CORS(app)
 
-@app.route('/')
-def index():
-    """Serve the main HTML page"""
-    return send_from_directory('templates', 'index.html')
+def create_app(test_config=None):
+    app = Flask(__name__, static_folder=None)
+    production = bool(os.getenv('VERCEL')) or os.getenv('APP_ENV') == 'production'
+    app.config.update(
+        PRODUCTION=production,
+        SECRET_KEY=os.getenv('APP_SECRET_KEY') or (None if production else secrets.token_hex(32)),
+        ACCESS_PASSWORD=os.getenv('APP_ACCESS_PASSWORD'),
+        SESSION_COOKIE_NAME='smartlook_session',
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SECURE=production,
+        SESSION_COOKIE_SAMESITE='Strict',
+        PERMANENT_SESSION_LIFETIME=timedelta(seconds=int(os.getenv('SESSION_TTL_SECONDS', '86400'))),
+        MAX_CONTENT_LENGTH=16_384,
+        STORE=configured_store(),
+        CHAT_LIMIT=int(os.getenv('CHAT_REQUESTS_PER_MINUTE', '5')),
+        IP_LIMIT=int(os.getenv('IP_REQUESTS_PER_MINUTE', '10')),
+        DAILY_LIMIT=int(os.getenv('DAILY_CHAT_LIMIT', '200')),
+    )
+    if test_config:
+        app.config.update(test_config)
 
-@app.route('/api/chat', methods=['POST'])
-def chat():
-    """Handle chat messages with conversation memory and visualization support"""
-    try:
-        data = request.get_json()
-        message = data.get('message', '').strip()
-        
-        if not message:
-            return jsonify({'error': 'No message provided'}), 400
-        
-        logger.info(f"Received message: {message}")
-        
-        # Call agent
-        response = ask(message)
-        
-        # Get tool routing info
-        tool_call = get_last_tool_call()
-        
-        logger.info(f"Tool used: {tool_call['name'] if tool_call else 'unknown'}")
-        
-        # Check if response is visualization data (JSON)
-        is_visualization = False
-        is_data_response = False
-        visualization_data = None
-        data_response = None
-        
-        # Check if tool is create_visualization OR create_cohort_analysis
-        if tool_call and tool_call['name'] in ['create_visualization', 'create_cohort_analysis']:
+    def configuration_ready():
+        return (bool(app.secret_key) and app.config['STORE'] is not None
+                and (not app.config['PRODUCTION'] or (
+                    len(app.secret_key) >= 32 and
+                    len(app.config.get('ACCESS_PASSWORD') or '') >= 12)))
+
+    def ip_key():
+        # Vercel overwrites x-vercel-forwarded-for; do not trust arbitrary x-forwarded-for.
+        address = (request.headers.get('x-vercel-forwarded-for') if os.getenv('VERCEL') else None)
+        address = (address or request.remote_addr or 'unknown').split(',')[0].strip()
+        return hmac.new(app.secret_key.encode(), address.encode(), hashlib.sha256).hexdigest()
+
+    def error(message, status):
+        response = jsonify(error=message, status='error')
+        response.status_code = status
+        if status == 429:
+            response.headers['Retry-After'] = '60'
+        return response
+
+    def cid():
+        value = (request.get_json(silent=True) or {}).get('conversation_id') if request.method == 'POST' else request.args.get('conversation_id')
+        if not isinstance(value, str) or not CID_PATTERN.fullmatch(value):
+            raise ValueError('A valid conversation_id is required')
+        return value
+
+    @app.before_request
+    def protect_requests():
+        if request.path == '/api/health' or request.path.startswith('/assets/'):
+            return None
+        if not configuration_ready():
+            if request.path.startswith('/api/'):
+                return error('Service setup is incomplete. Please contact the owner.', 503)
+            return render_template('unavailable.html'), 503
+        if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            origin = request.headers.get('Origin')
+            if request.headers.get('Sec-Fetch-Site') == 'cross-site' or (
+                origin and urlsplit(origin).netloc != request.host
+            ):
+                return error('Cross-site requests are not allowed', 403)
+        if request.path == '/login':
+            return None
+        if app.config['ACCESS_PASSWORD'] and not session.get('authenticated'):
+            return error('Please sign in to continue', 401) if request.path.startswith('/api/') else redirect('/login')
+        if 'sid' not in session:
+            session['sid'] = secrets.token_urlsafe(32)
+            session.permanent = True
+
+    @app.after_request
+    def response_headers(response):
+        if not request.path.startswith('/assets/'):
+            response.headers['Cache-Control'] = 'no-store'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['Referrer-Policy'] = 'same-origin'
+        return response
+
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        if request.method == 'POST':
+            store = app.config['STORE']
+            if not store.allow('login:' + ip_key(), 10, 900) or not store.allow('login-global', 600, 3600):
+                return render_template('login.html', error='Too many attempts. Try again in 15 minutes.'), 429
+            submitted = request.form.get('password', '')
+            expected = app.config['ACCESS_PASSWORD'] or ''
+            if expected and hmac.compare_digest(submitted.encode(), expected.encode()):
+                session.clear()
+                session['authenticated'] = True
+                session['sid'] = secrets.token_urlsafe(32)
+                session.permanent = True
+                return redirect('/')
+            return render_template('login.html', error='Incorrect access password.'), 401
+        return render_template('login.html')
+
+    @app.route('/')
+    def index():
+        return send_from_directory(app.template_folder, 'index.html')
+
+    @app.route('/assets/<path:filename>')
+    def assets(filename):
+        # Local fallback; Vercel serves public/assets directly from the CDN.
+        return send_from_directory(os.path.join(app.root_path, 'public', 'assets'), filename)
+
+    @app.post('/api/chat')
+    def chat():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return error('A JSON object is required', 400)
+        message = data.get('message')
+        if not isinstance(message, str) or not message.strip() or len(message) > 4000:
+            return error('Enter a message between 1 and 4000 characters', 400)
+        conversation_id = cid()
+        runner = app.config.get('AGENT_RUNNER')
+        if runner is None:
+            if not ai_configured():
+                return error('AI credentials have not been configured by the owner', 503)
+            from agent import ask
+            runner = ask
+        store = app.config['STORE']
+        sid = session['sid']
+        with store.lock(sid):
+            limits = [('session:' + sid, app.config['CHAT_LIMIT'], 60),
+                      ('ip:' + ip_key(), app.config['IP_LIMIT'], 60),
+                      ('daily', app.config['DAILY_LIMIT'], 86400)]
+            for key, limit, seconds in limits:
+                if not store.allow(key, limit, seconds):
+                    return error('Usage limit reached. Please try again later.', 429)
+            history = store.load(sid, conversation_id)
+            result = runner(message.strip(), history)
+            raw = result['response']
+            tool = (result.get('tool_call') or {}).get('name')
             try:
-                visualization_data = json.loads(response)
-                is_visualization = True
-                
-                # Generate analysis text for visualizations (if not already present)
-                if not visualization_data.get('error') and not visualization_data.get('response_text'):
-                    # Import the tool directly
-                    from agent import answer_ecommerce_question
-                    
-                    # Get the original question
-                    question = visualization_data.get('question', message)
-                    
-                    # Call answer_ecommerce_question to get formatted analysis with recommendations
-                    try:
-                        analysis_response = answer_ecommerce_question.invoke({"question": question})
-                        
-                        # NEW: Parse the JSON response to extract just the text
-                        try:
-                            parsed_response = json.loads(analysis_response)
-                            if parsed_response.get('is_data_response'):
-                                visualization_data['response_text'] = parsed_response.get('response_text', '')
-                            else:
-                                visualization_data['response_text'] = analysis_response
-                        except json.JSONDecodeError:
-                            # If not JSON, use as-is (backward compatibility)
-                            visualization_data['response_text'] = analysis_response
-                            
-                        logger.info("Generated analysis with actionable recommendations")
-                    except Exception as e:
-                        logger.warning(f"Could not generate analysis text: {e}")
-                
-                logger.info(f"Visualization created successfully: {tool_call['name']}")
-            except json.JSONDecodeError:
-                logger.warning("Failed to parse visualization JSON")
-        
-        # NEW: Check if tool is answer_ecommerce_question (data response with CSV)
-        elif tool_call and tool_call['name'] in ['answer_ecommerce_question', 'generate_and_show_sql']:
-            try:
-                data_response = json.loads(response)
-                if data_response.get('is_data_response'):
-                    is_data_response = True
-                    logger.info("Data response with CSV download created successfully")
-                else:
-                    # Not a data response, treat as regular text
-                    data_response = None
-            except json.JSONDecodeError:
-                # Not JSON, treat as regular text response
-                logger.info("Regular text response from answer_ecommerce_question")
-        
-        return jsonify({
-            'response': response,
-            'status': 'success',
-            'tool_used': tool_call['name'] if tool_call else None,
-            'context_aware': len(get_conversation_history()) > 0,
-            'is_visualization': is_visualization,
-            'visualization_data': visualization_data,
-            'is_data_response': is_data_response,
-            'data_response': data_response
-        })
-    
-    except Exception as e:
-        logger.error(f"Error processing chat: {str(e)}")
-        return jsonify({
-            'error': str(e),
-            'status': 'error'
-        }), 500
+                structured = json.loads(raw)
+            except (ValueError, TypeError):
+                structured = None
+            if not isinstance(structured, dict):
+                structured = None
+            is_visualization = bool(structured and tool in ('create_visualization', 'create_cohort_analysis'))
+            is_data = bool(structured and structured.get('is_data_response'))
+            # Send large chart/source data only once, not both as a JSON string and object.
+            text = (structured.get('response_text') or structured.get('error') or 'Chart generated.') if structured else str(raw)
+            payload = dict(
+                response=text, status='success', tool_used=tool,
+                context_aware=bool(history), is_visualization=is_visualization,
+                visualization_data=structured if is_visualization else None,
+                is_data_response=is_data, data_response=structured if is_data and not is_visualization else None,
+            )
+            response = jsonify(payload)
+            if len(response.get_data()) > MAX_RESPONSE_BYTES:
+                return error('Result is too large. Ask for fewer columns or a smaller date range.', 413)
+            history += [{'role': 'User', 'content': message.strip()},
+                        {'role': 'Assistant', 'content': text[:4000]}]
+            store.save(sid, conversation_id, history[-20:])
+            return response
 
-@app.route('/api/clear', methods=['POST'])
-def clear_conversation():
-    """Clear conversation history"""
-    try:
-        clear_history()
-        logger.info("Conversation history cleared")
-        return jsonify({
-            'status': 'success',
-            'message': 'Conversation history cleared'
-        })
-    except Exception as e:
-        logger.error(f"Error clearing history: {str(e)}")
-        return jsonify({
-            'error': str(e),
-            'status': 'error'
-        }), 500
+    @app.post('/api/clear')
+    def clear():
+        store = app.config['STORE']
+        with store.lock(session['sid']):
+            store.clear(session['sid'])
+        return jsonify(status='success')
 
-@app.route('/api/history', methods=['GET'])
-def get_history():
-    """Get conversation history"""
-    try:
-        history = get_conversation_history()
-        return jsonify({
-            'history': history,
-            'count': len(history),
-            'status': 'success'
-        })
-    except Exception as e:
-        logger.error(f"Error getting history: {str(e)}")
-        return jsonify({
-            'error': str(e),
-            'status': 'error'
-        }), 500
+    @app.get('/api/history')
+    def history():
+        messages = app.config['STORE'].load(session['sid'], cid())
+        return jsonify(history=messages, count=len(messages), status='success')
 
-@app.route('/api/health', methods=['GET'])
-def health():
-    """Check system health"""
-    try:
-        status = check_connection()
-        history_count = len(get_conversation_history())
-        
-        return jsonify({
-            'status': 'healthy',
-            'connections': status,
-            'conversation_messages': history_count,
-            'memory_enabled': True,
-            'visualization_enabled': True,
-            'cohort_analysis_enabled': True,
-            'csv_download_enabled': True  # NEW
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'unhealthy',
-            'error': str(e)
-        }), 500
+    @app.get('/api/health')
+    def health():
+        # Liveness/readiness only: never spend Groq tokens or submit BigQuery jobs.
+        ready = configuration_ready() and ai_configured()
+        return jsonify(status='ready' if ready else 'setup_required'), 200 if ready else 503
 
-@app.route('/assets/<path:filename>')
-def serve_assets(filename):
-    """Serve static assets"""
-    return send_from_directory('templates/assets', filename)
+    @app.errorhandler(ConversationBusy)
+    def busy(exc):
+        return error(str(exc), 409)
 
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify({
-        'error': 'Endpoint not found',
-        'status': 'error'
-    }), 404
+    @app.errorhandler(StorageUnavailable)
+    def storage_error(exc):
+        logger.warning('Shared storage request failed')
+        return error('Conversation storage is unavailable. Please try again later.', 503)
 
-@app.errorhandler(500)
-def internal_error(e):
-    logger.error(f"Internal server error: {str(e)}")
-    return jsonify({
-        'error': 'Internal server error',
-        'status': 'error'
-    }), 500
+    @app.errorhandler(ValueError)
+    def invalid_input(exc):
+        return error('Invalid request. Check the conversation ID and message.', 400)
+
+    @app.errorhandler(HTTPException)
+    def http_error(exc):
+        return error(exc.name, exc.code)
+
+    @app.errorhandler(Exception)
+    def internal_error(exc):
+        logger.error('Chat request failed (%s)', type(exc).__name__)
+        return error('Unable to complete the request. Please try again.', 500)
+
+    return app
+
+
+app = create_app()
 
 if __name__ == '__main__':
-    # Create directories if they don't exist
-    os.makedirs('templates', exist_ok=True)
-    os.makedirs('static', exist_ok=True)
-    os.makedirs('templates/assets', exist_ok=True)
-    
-    # Run the app on port 8000 (avoiding macOS AirPlay on 5000)
-    port = int(os.environ.get('PORT', 8000))
-    
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='127.0.0.1', port=int(os.getenv('PORT', '8000')), debug=False)
