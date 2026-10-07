@@ -30,7 +30,7 @@ MAX_RESULT_ROWS = min(int(os.getenv("MAX_RESULT_ROWS", "1000")), 1000)
 
 @lru_cache(maxsize=1)
 def get_bigquery_client():
-    credentials_dict = json.loads(os.environ["GCP_SERVICE_ACCOUNT_JSON"])
+    credentials_dict = json.loads(os.getenv("GCP_SERVICE_ACCOUNT_JSON") or os.environ["GCP_SERVICE_ACCOUNT"])
     credentials = service_account.Credentials.from_service_account_info(credentials_dict)
     return bigquery.Client(credentials=credentials, project=os.environ["GOOGLE_CLOUD_PROJECT"])
 

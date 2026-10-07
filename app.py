@@ -18,7 +18,12 @@ load_dotenv('.env.local')
 from storage import configured_store, ConversationBusy, StorageUnavailable
 
 logger = logging.getLogger(__name__)
-REQUIRED_AI_ENV = ('GROQ_API_KEY', 'GOOGLE_CLOUD_PROJECT', 'GCP_SERVICE_ACCOUNT_JSON')
+REQUIRED_AI_ENV = ('GROQ_API_KEY', 'GOOGLE_CLOUD_PROJECT')
+
+def ai_configured():
+    return all(os.getenv(key) for key in REQUIRED_AI_ENV) and bool(
+        os.getenv('GCP_SERVICE_ACCOUNT_JSON') or os.getenv('GCP_SERVICE_ACCOUNT')
+    )
 CID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]{1,64}$')
 MAX_RESPONSE_BYTES = 3_500_000
 
@@ -137,7 +142,7 @@ def create_app(test_config=None):
         conversation_id = cid()
         runner = app.config.get('AGENT_RUNNER')
         if runner is None:
-            if any(not os.getenv(key) for key in REQUIRED_AI_ENV):
+            if not ai_configured():
                 return error('AI credentials have not been configured by the owner', 503)
             from agent import ask
             runner = ask
@@ -193,7 +198,7 @@ def create_app(test_config=None):
     @app.get('/api/health')
     def health():
         # Liveness/readiness only: never spend Groq tokens or submit BigQuery jobs.
-        ready = configuration_ready() and all(os.getenv(key) for key in REQUIRED_AI_ENV)
+        ready = configuration_ready() and ai_configured()
         return jsonify(status='ready' if ready else 'setup_required'), 200 if ready else 503
 
     @app.errorhandler(ConversationBusy)

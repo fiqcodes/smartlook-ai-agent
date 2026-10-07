@@ -21,7 +21,7 @@ credentials into a Git commit, issue, PR, or a browser-side JavaScript file.
 | --- | --- |
 | `GROQ_API_KEY` | API key from your Groq account |
 | `GOOGLE_CLOUD_PROJECT` | Google project in which query jobs run and are billed |
-| `GCP_SERVICE_ACCOUNT_JSON` | Complete JSON service-account credential, as a single environment value |
+| `GCP_SERVICE_ACCOUNT_JSON` | Complete JSON service-account credential, as a single environment value (`GCP_SERVICE_ACCOUNT` is also accepted) |
 | `APP_SECRET_KEY` | At least 32 random characters; generate locally with `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `APP_ACCESS_PASSWORD` | A strong password of at least 12 characters, shared only with intended demo users |
 | `UPSTASH_REDIS_REST_URL` | HTTPS endpoint from an Upstash Redis database |

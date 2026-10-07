@@ -126,3 +126,15 @@ def test_health_has_no_external_calls(app, monkeypatch):
     assert response.json == {'status': 'setup_required'}
     assert app.test_client().get('/').status_code == 200
     assert app.test_client().get('/assets/smartlook_logo.png').status_code == 200
+
+
+def test_google_credential_alias_and_canonical_names(app, monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY', 'test-only')
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    monkeypatch.delenv('GCP_SERVICE_ACCOUNT_JSON', raising=False)
+    monkeypatch.setenv('GCP_SERVICE_ACCOUNT', '{}')
+    assert app.test_client().get('/api/health').json == {'status': 'ready'}
+    monkeypatch.delenv('GCP_SERVICE_ACCOUNT', raising=False)
+    assert app.test_client().get('/api/health').status_code == 503
+    monkeypatch.setenv('GCP_SERVICE_ACCOUNT_JSON', '{}')
+    assert app.test_client().get('/api/health').json == {'status': 'ready'}
