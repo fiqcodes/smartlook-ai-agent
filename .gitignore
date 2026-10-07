@@ -2,6 +2,17 @@ __pycache__/
 *.py[cod]
 *.ipynb_checkpoints
 .env
+.env.*
+!.env.example
 .streamlit/secrets.toml
-*.json
+*credentials*.json
+*service-account*.json
 venv/
+.venv/
+.vercel/
+.pytest_cache/
+.vercel
+.env*
+
+# Keep the credential-free template tracked.
+!.env.example

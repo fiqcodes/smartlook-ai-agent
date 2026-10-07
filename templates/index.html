@@ -987,6 +987,33 @@
         let allChats = {};
         let visualizationData = {}; // Store visualization data separately
 
+        function persistChats() {
+            try {
+                sessionStorage.setItem('smartlook-chats', JSON.stringify({
+                    currentChatId, allChats, visualizationData
+                }));
+            } catch (_) {
+                // Large chart payloads may exceed browser storage: preserve text and IDs.
+                try { sessionStorage.setItem('smartlook-chats', JSON.stringify({currentChatId, allChats})); }
+                catch (_) { /* The app still works when browser storage is unavailable. */ }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const saved = JSON.parse(sessionStorage.getItem('smartlook-chats') || 'null');
+                if (!saved || !saved.allChats) return;
+                allChats = saved.allChats;
+                visualizationData = saved.visualizationData || {};
+                for (const [id, messages] of Object.entries(allChats)) {
+                    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id) || !Array.isArray(messages)) continue;
+                    currentChatId = id;
+                    updateHistorySidebar(String(messages[0]?.content || 'Conversation'));
+                }
+                if (saved.currentChatId && allChats[saved.currentChatId]) loadChat(saved.currentChatId);
+            } catch (_) { /* Ignore invalid or unavailable browser storage. */ }
+        });
+
         function adjustTextareaHeight(textarea) {
             textarea.style.height = 'auto';
             textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
@@ -1000,10 +1027,11 @@
         }
 
         function newChat() {
+            if (isLoading) return;
             if (currentChatId && chatHistory.length > 0) {
                 allChats[currentChatId] = [...chatHistory];
             }
-            currentChatId = Date.now().toString();
+            currentChatId = crypto.randomUUID();
             chatHistory = [];
             document.getElementById('welcomeScreen').style.display = 'flex';
             document.getElementById('messagesContainer').style.display = 'none';
@@ -1012,7 +1040,6 @@
                 item.classList.remove('active');
             });
             
-            clearBackendHistory();
             updateContextBadge(false);
         }
 
@@ -1027,7 +1054,7 @@
             if (!message || isLoading) return;
             
             if (!currentChatId) {
-                currentChatId = Date.now().toString();
+                currentChatId = crypto.randomUUID();
             }
             
             document.getElementById('welcomeScreen').style.display = 'none';
@@ -1053,11 +1080,13 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({ message, conversation_id: currentChatId })
                 });
                 
                 const data = await response.json();
-                
+                if (response.status === 401) { window.location.assign('/login'); return; }
+                if (!response.ok) throw new Error(data.error || 'Request failed');
+
                 removeLoadingMessage(loadingId);
                 
                 // Handle visualization response
@@ -1091,13 +1120,14 @@
                 
                 chatHistory.push({ role: 'assistant', content: data.response });
                 allChats[currentChatId] = [...chatHistory];
-                
+                persistChats();
+
                 if (data.context_aware) {
                     updateContextBadge(true);
                 }
             } catch (error) {
                 removeLoadingMessage(loadingId);
-                addMessage('assistant', '❌ Sorry, there was an error processing your request. Please try again.');
+                addMessage('assistant', error.message || 'Unable to complete the request. Please try again.');
                 console.error('Error:', error);
             } finally {
                 isLoading = false;
@@ -1119,6 +1149,7 @@
             
             const contentWrapper = document.createElement('div');
             contentWrapper.style.flex = '1';
+            contentWrapper.style.minWidth = '0';
             
             const header = document.createElement('div');
             header.className = 'message-header';
@@ -1188,7 +1219,7 @@
                                 </svg>
                                 Copy code
                             </button>
-                            <pre><code>${dataResponse.sql}</code></pre>
+                            <pre><code>${escapeHtml(dataResponse.sql)}</code></pre>
                         </div>
                     </div>
                 `;
@@ -1226,6 +1257,7 @@
             
             const contentWrapper = document.createElement('div');
             contentWrapper.style.flex = '1';
+            contentWrapper.style.minWidth = '0';
             
             const header = document.createElement('div');
             header.className = 'message-header';
@@ -1244,8 +1276,8 @@
             if (vizData.error) {
                 // Show error message
                 contentDiv.innerHTML = `
-                    <p style="color: #dc2626;">❌ ${vizData.error}</p>
-                    ${vizData.sql ? `<br><strong>SQL Query:</strong><pre><code>${vizData.sql}</code></pre>` : ''}
+                    <p style="color: #dc2626;">❌ ${escapeHtml(vizData.error)}</p>
+                    ${vizData.sql ? `<br><strong>SQL Query:</strong><pre><code>${escapeHtml(vizData.sql)}</code></pre>` : ''}
                 `;
             } else {
                 // Create visualization container
@@ -1359,7 +1391,7 @@
                                     </svg>
                                     Copy code
                                 </button>
-                                <pre><code>${vizData.sql}</code></pre>
+                                <pre><code>${escapeHtml(vizData.sql)}</code></pre>
                             </div>
                         </div>
                     `;
@@ -1376,6 +1408,8 @@
                             ...chartData.layout,
                             title: '',
                             height: 500,
+                            width: undefined,
+                            autosize: true,
                             xaxis: {
                                 ...chartData.layout.xaxis,
                                 tickangle: 0,
@@ -1455,6 +1489,7 @@
             
             const contentWrapper = document.createElement('div');
             contentWrapper.style.flex = '1';
+            contentWrapper.style.minWidth = '0';
             
             const header = document.createElement('div');
             header.className = 'message-header';
@@ -1481,7 +1516,14 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
+        function escapeHtml(text) {
+            const element = document.createElement('span');
+            element.textContent = String(text ?? '');
+            return element.innerHTML;
+        }
+
         function formatMessage(text) {
+            text = escapeHtml(text);
             text = text.replace(/📊|📈|📉|🎯|💬|🏆|📊|📉|⚠️|✅|❌/g, '');
             text = text.replace(/\*\*(Key Insights:)\*\*/g, '<h3 class="key-insights-header">$1</h3>');
             text = text.replace(/\*\*(Actionable Recommendations:)\*\*/g, '<h3 class="actionable-recommendations-header">$1</h3>');
@@ -1523,6 +1565,7 @@
             
             const contentWrapper = document.createElement('div');
             contentWrapper.style.flex = '1';
+            contentWrapper.style.minWidth = '0';
             
             const header = document.createElement('div');
             header.className = 'message-header';
@@ -1587,6 +1630,7 @@
         }
 
         function loadChat(chatId) {
+            if (isLoading) return;
             if (currentChatId && chatHistory.length > 0) {
                 allChats[currentChatId] = [...chatHistory];
             }
@@ -1626,7 +1670,6 @@
                 }
             });
             
-            clearBackendHistory();
             updateContextBadge(false);
         }
 
@@ -1639,13 +1682,14 @@
                     }
                 });
                 const data = await response.json();
-                console.log('Backend history cleared:', data);
+                if (!response.ok) throw new Error(data.error || 'Unable to clear history');
             } catch (error) {
-                console.error('Error clearing backend history:', error);
+                throw error;
             }
         }
 
         async function clearConversationHistory() {
+            if (isLoading) return;
             if (!confirm('Are you sure you want to clear all conversation history? This will remove all chats from the sidebar.')) {
                 return;
             }
@@ -1665,7 +1709,7 @@
                 
                 updateContextBadge(false);
                 
-                console.log('All conversation history cleared');
+                sessionStorage.removeItem('smartlook-chats');
             } catch (error) {
                 console.error('Error clearing conversation history:', error);
                 alert('Failed to clear conversation history. Please try again.');
@@ -1683,7 +1727,7 @@
 
         async function getBackendHistory() {
             try {
-                const response = await fetch('/api/history');
+                const response = await fetch('/api/history?conversation_id=' + encodeURIComponent(currentChatId || 'default'));
                 const data = await response.json();
                 console.log('Backend conversation history:', data);
                 return data;
@@ -1732,7 +1776,8 @@
             for (const row of data) {
                 const values = headers.map(header => {
                     // Escape quotes and wrap in quotes to handle commas/newlines in data
-                    const val = row[header] === null || row[header] === undefined ? '' : String(row[header]);
+                    let val = row[header] === null || row[header] === undefined ? '' : String(row[header]);
+                    if (/^[=+@\-\t\r]/.test(val)) val = "'" + val;
                     const escaped = val.replace(/"/g, '""');
                     return `"${escaped}"`;
                 });

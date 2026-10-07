@@ -2,10 +2,10 @@
 
 <div align="center">
 
-![LangGraph](https://img.shields.io/badge/LangGraph-0.0.26-FF6B6B?style=for-the-badge&logo=langchain&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-3.0.0-000000?style=for-the-badge&logo=flask&logoColor=white)
-![Plotly](https://img.shields.io/badge/Plotly-5.18.0-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.2-FF6B6B?style=for-the-badge&logo=langchain&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.1-000000?style=for-the-badge&logo=flask&logoColor=white)
+![Plotly](https://img.shields.io/badge/Plotly-5.24-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)
 ![BigQuery](https://img.shields.io/badge/BigQuery-Cloud-669DF6?style=for-the-badge&logo=googlebigquery&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-LLM-FF6B35?style=for-the-badge)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
@@ -20,7 +20,7 @@ https://github.com/user-attachments/assets/da746a68-1a64-404e-8b11-ed9349c14a3f
 
 ## Overview
 
-**SmartLook** is a generative business intelligence and text-to-SQL agent that analyzes datasets from an e-commerce company, detects trends, and generates accurate SQL queries and visualizations to support business analysis tasks. The system features an intuitive React interface that accelerates insight generation, automates exploratory analysis, and reduces manual effort for analysts.
+**SmartLook** is a generative business intelligence and text-to-SQL agent that analyzes datasets from an e-commerce company, detects trends, and generates accurate SQL queries and visualizations to support business analysis tasks. The system features an intuitive JavaScript interface that accelerates insight generation, automates exploratory analysis, and reduces manual effort for analysts.
 
 Try it out here: [SmartLook AI Agent](https://smartlook-ai-agent--rafiqkastara7.replit.app/)
 
@@ -44,127 +44,84 @@ SmartLook uses a multi-agent architecture powered by LangGraph:
 3. **Reasoning Flow**: Structured decision-making process for complex analysis
 4. **Few-Shot Learning**: Learns from examples to improve query accuracy
 
-## Technologies Used
+## Run locally
 
-### Backend
-- **Flask 3.0.0** - Web framework for API endpoints
-- **LangGraph 0.0.26** - Agent orchestration and workflow management
-- **LangChain Core 0.1.40** - Foundation for LLM integration
-- **LangChain Groq 0.1.0** - Fast LLM inference
-- **Google Cloud BigQuery 3.15.0** - Cloud data warehouse
-- **Pandas 2.2.3** - Data manipulation and analysis
-- **Plotly 5.18.0** - Interactive data visualizations
+Python 3.12 is pinned in `.python-version`. Install the locked dependencies, then
+copy `.env.example` to `.env.local` and fill in your own credentials:
 
-### Frontend
-- **Vanilla JavaScript** - Interactive frontend logic
-- **HTML5** - Semantic markup structure
-- **CSS3** - Modern styling with gradients and animations
-- **Plotly.js** - Interactive data visualizations
-
-### Infrastructure
-- **Gunicorn 21.2.0** - Production WSGI server
-- **Flask-CORS 4.0.0** - Cross-origin resource sharing
-- **Google Auth 2.23.0** - Authentication for GCP services
-
-## Project Structure
-```
-smartlook-ai-agent/
-│
-├── templates/                    # HTML templates
-│   ├── assets/                   # Static assets (CSS, JS, images)
-│   └── index.html                # Main frontend interface
-│
-├── agent.py                      # AI agent implementation
-├── app_flask.py                  # Flask application
-├── requirements.txt              # Python dependencies
-├── Procfile                      # Deployment configuration
-├── .gitignore                    # Git ignore rules
-└── README.md                     # Project documentation
-```
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.8+
-- Google Cloud Platform account with BigQuery access
-- Groq API key (or other LLM provider)
-
-### Backend Setup
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/RafiqNaufal/smartlook-ai-agent.git
-cd smartlook-ai-agent
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env.local
+python app.py
 ```
 
-4. Set up environment variables:
+Open http://127.0.0.1:8000. Local development uses in-memory conversation storage
+unless Redis is configured. Real AI requests require Groq and Google Cloud
+credentials; the homepage can start without them.
+
+## Deploy to Vercel
+
+See [the deployment guide](docs/VERCEL_DEPLOYMENT.md) for account setup, required
+secrets, Redis, budgets, and validation steps. Vercel detects `app.py:app` using
+the Flask preset; no frontend build command or output directory is needed.
+
+The backend uses Flask, LangGraph, LangChain Groq, BigQuery, Pandas, Plotly,
+and SQLGlot. The frontend remains vanilla HTML/CSS/JavaScript with Plotly.js.
+Exact dependency versions are committed in `requirements.txt`; update them from
+`requirements.in` using `uv pip compile requirements.in --python-version 3.12
+--output-file requirements.txt` and run the tests before deploying.
+
+## Project structure
+
+```text
+app.py                 Flask routes, authentication, limits, response handling
+agent.py               LangGraph agent, read-only SQL validation, charts
+storage.py             Redis sessions, locks, and rate limits
+public/assets/         Images and demo assets served by Vercel CDN
+templates/index.html   Existing chat frontend
+templates/login.html   Password entry page
+requirements.in        Direct dependency constraints
+requirements.txt       Locked runtime dependencies
+vercel.json            Flask function configuration
+.env.example           Configuration template; never put secrets in Git
+tests/                 Backend tests and local browser fixture
+```
+
+## Tests
+
 ```bash
-cp .env.example .env
-# Edit .env with your credentials:
-# - GROQ_API_KEY
-# - GOOGLE_APPLICATION_CREDENTIALS
-# - BIGQUERY_PROJECT_ID
-# - BIGQUERY_DATASET_ID
+pip install -r requirements-dev.txt
+python -m pytest -q
 ```
 
-5. Run the Flask application:
-```bash
-python app_flask.py
-```
-
-The application will be available at `http://localhost:5000`
-
-## Requirements
-```txt
-flask==3.0.0
-flask-cors==4.0.0
-langchain-groq==0.1.0
-langchain-core==0.1.40
-langgraph==0.0.26
-google-cloud-bigquery==3.15.0
-pandas==2.2.3
-requests==2.31.0
-db-dtypes==1.1.1
-plotly==5.18.0
-kaleido==0.2.1
-gunicorn==21.2.0
-google-auth==2.23.0
-sqlparse==0.4.4
-```
+For the browser fixture, run `python tests/browser_server.py`, then run
+`node tests/browser_smoke.cjs` with Playwright installed and Chrome available.
+The fixture binds only to localhost and never calls Groq or BigQuery. It is
+excluded from Vercel deployments.
 
 ## Usage Examples
 
 ### Example 1: Natural Language Query
 - User: "What are the top 5 best-selling products?"
 - SmartLook: Generates SQL query, executes it, and presents results with insights
-<img src="templates/assets/analysis_question.png" width="100%"/>
+<img src="public/assets/analysis_question.png" width="100%"/>
 
 ### Example 2: Trend Analysis
 - User: "Create a stacked bar chart of quarterly revenue share by the top 5 countries in 2025"
 - SmartLook: Creates visualization and identifies key patterns
-<img src="templates/assets/stackedbar_chart.png" width="100%"/>
+<img src="public/assets/stackedbar_chart.png" width="100%"/>
 
 ### Example 3: Complex Analysis
 - User: "Perform a cohort-based user retention analysis in 2025"
 - SmartLook: Performs cohort analysis and detects patterns with actionable recommendations
-<img src="templates/assets/cohort.png" width="100%"/>
+<img src="public/assets/cohort.png" width="100%"/>
 
 ### Example 4: SQL Generation
 - User: "Show me the SQL query to find the best-selling product in 2025"
 - SmartLook: Generates SQL query based on user request and validates it
-<img src="templates/assets/sql.png" width="100%"/>
+<img src="public/assets/sql.png" width="100%"/>
 
 ## Features in Detail
 
@@ -197,13 +154,19 @@ Robust error handling and recovery:
 - **Automated analysis** of recurring business questions
 - **Democratized data access** for non-technical stakeholders
 
-## Security
+## Deployment safeguards
 
-- Secure authentication with Google Cloud
-- Role-based access control
-- Query sanitization and validation
-- Encrypted data transmission
-- Audit logging for compliance
+- Shared demo access password; this is not a role-based multi-user identity system.
+- Signed, HTTP-only session cookies with isolated Redis conversation histories.
+- Atomic session locks plus per-session, per-IP, and daily request limits.
+- One read-only query per call, restricted to the known TheLook public tables.
+- BigQuery bytes-billed and execution limits, capped result rows and response size.
+- Secrets stay server-side; chat text is escaped before rendering HTML.
+
+Use a minimally privileged Google service account. The chat history retains the
+last 20 messages per conversation, up to 30 conversations per session, for 24 hours
+by default. Text and chart display state are also saved in the browser tab's
+session storage; Clear History removes that tab's saved state and its backend history.
 
 ## Contributing
 

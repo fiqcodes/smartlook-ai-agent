@@ -1,9 +1,13 @@
 import logging
 import re
-import warnings
 import os
 import colorsys
 import random
+from contextvars import ContextVar
+from functools import lru_cache
+from concurrent.futures import TimeoutError as FutureTimeout
+from sqlglot import parse, exp
+from sqlglot.optimizer.scope import traverse_scope
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage, BaseMessage
@@ -15,50 +19,29 @@ import json
 import plotly.graph_objects as go
 import pandas as pd
 
-# Suppress warnings
-warnings.filterwarnings('ignore')
-os.environ['GRPC_VERBOSITY'] = 'ERROR'
-os.environ['GLOG_minloglevel'] = '2'
-
-PRODUCTION_MODE = True
-if PRODUCTION_MODE:
-    logging.basicConfig(level=logging.CRITICAL)
-    for name in ['httpx', 'httpcore', 'google', 'urllib3', 'langchain', 'langgraph']:
-        logging.getLogger(name).setLevel(logging.CRITICAL)
-
 logger = logging.getLogger(__name__)
 
-# Define state
 class AgentState(TypedDict):
     messages: Sequence[BaseMessage]
+    tool_call: dict
 
-# Get API keys
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY not found in environment variables")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+MAX_RESULT_ROWS = min(int(os.getenv("MAX_RESULT_ROWS", "1000")), 1000)
 
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-
-# Initialize BigQuery with proper credential handling for deployment
-PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
-if not PROJECT_ID:
-    raise ValueError("GOOGLE_CLOUD_PROJECT not found in environment variables")
-
-# Get GCP credentials from environment variable
-gcp_json_str = os.environ.get("GCP_SERVICE_ACCOUNT_JSON")
-if not gcp_json_str:
-    raise ValueError("GCP_SERVICE_ACCOUNT_JSON not found in environment variables")
-
-try:
-    # Parse JSON credentials
-    credentials_dict = json.loads(gcp_json_str)
+@lru_cache(maxsize=1)
+def get_bigquery_client():
+    credentials_dict = json.loads(os.environ["GCP_SERVICE_ACCOUNT_JSON"])
     credentials = service_account.Credentials.from_service_account_info(credentials_dict)
-    bq_client = bigquery.Client(credentials=credentials, project=PROJECT_ID)
-    logger.info("✅ BigQuery initialized successfully")
-except json.JSONDecodeError as e:
-    raise ValueError(f"Invalid JSON in GCP_SERVICE_ACCOUNT_JSON: {str(e)}")
-except Exception as e:
-    raise ValueError(f"Failed to initialize BigQuery: {str(e)}")
+    return bigquery.Client(credentials=credentials, project=os.environ["GOOGLE_CLOUD_PROJECT"])
+
+def make_llm(temperature=0):
+    return ChatGroq(
+        model=GROQ_MODEL, temperature=temperature,
+        api_key=os.environ["GROQ_API_KEY"],
+        timeout=min(float(os.getenv("GROQ_TIMEOUT_SECONDS", "30")), 30),
+        max_retries=0,
+        max_tokens=min(int(os.getenv("GROQ_MAX_TOKENS", "4096")), 8192),
+    )
 
 ECOMMERCE_TABLES = {
     "users": "bigquery-public-data.thelook_ecommerce.users",
@@ -290,42 +273,55 @@ def _strip_code_fences(sql: str) -> str:
     
     return s.strip()
 
+def _validated_sql(sql: str) -> str:
+    statements = parse(_strip_code_fences(sql), read="bigquery")
+    if len(statements) != 1 or not isinstance(statements[0], (exp.Select, exp.Union, exp.Intersect, exp.Except)):
+        raise ValueError("Only one read-only SELECT query is allowed")
+    query = statements[0]
+    # Resolve CTE aliases through SQL scopes, then allow only known physical tables.
+    for scope in traverse_scope(query):
+        for source in scope.sources.values():
+            if not isinstance(source, exp.Table):
+                continue
+            name = source.name.lower()
+            if name not in ECOMMERCE_TABLES:
+                raise ValueError("Only TheLook Ecommerce tables are allowed")
+            if source.catalog and source.catalog != "bigquery-public-data":
+                raise ValueError("Queries cannot access other projects")
+            if source.db and source.db != "thelook_ecommerce":
+                raise ValueError("Queries cannot access other datasets")
+            source.set("catalog", exp.to_identifier("bigquery-public-data", quoted=True))
+            source.set("db", exp.to_identifier("thelook_ecommerce"))
+    # Reject table functions and remote/external functions; no remote code or data access.
+    for table in query.find_all(exp.Table):
+        if not isinstance(table.this, exp.Identifier):
+            raise ValueError("Table functions are not allowed")
+    if any(isinstance(node, exp.Anonymous) and node.name.upper() in
+           {"EXTERNAL_QUERY", "EXTERNAL_OBJECT_TRANSFORM"} for node in query.walk()):
+        raise ValueError("External queries are not allowed")
+    if any(isinstance(node, exp.Dot) and isinstance(node.expression, exp.Func)
+           for node in query.walk()):
+        raise ValueError("User-defined and remote functions are not allowed")
+    limit = query.args.get("limit")
+    if limit is None:
+        query = query.limit(min(500 if "stack_category" in sql.lower() else DEFAULT_LIMIT, MAX_RESULT_ROWS))
+    else:
+        value = limit.expression
+        if not isinstance(value, exp.Literal) or not value.is_int or not 0 <= int(value.this) <= MAX_RESULT_ROWS:
+            query = query.limit(MAX_RESULT_ROWS)
+    return query.sql(dialect="bigquery")
+
+
 def _transform_sql_internal(sql: str) -> str:
-    s = _strip_code_fences(sql)
-    s = re.sub(r"\s+", " ", s).strip()
-    s = s.replace('`', '')
-    s = s.replace('bigquery-public-data.thelook_ecommerce.', '')
-    
-    for short_name, full_name in ECOMMERCE_TABLES.items():
-        pattern = rf'\b{short_name}\b'
-        replacement = f'`{full_name}`'
-        s = re.sub(pattern, replacement, s, flags=re.IGNORECASE)
-    
-    if "LIMIT" not in s.upper():
-        # Check if this is a stacked bar query (has CROSS JOIN and stack_category)
-        if "CROSS JOIN" in s.upper() and "stack_category" in s.lower():
-            s = s.rstrip(";") + f" LIMIT 500;"
-        else:
-            s = s.rstrip(";") + f" LIMIT {DEFAULT_LIMIT};"
-    
-    return s.strip()
+    return _validated_sql(sql)
+
 
 def _is_safe_sql_internal(sql: str) -> bool:
-    """Check if SQL is safe (read-only)"""
-    sql_lower = sql.lower()
-    
-    # Check for dangerous keywords at word boundaries
-    dangerous_patterns = [
-        r'\bdrop\b', r'\bdelete\b', r'\binsert\b', r'\bupdate\b', 
-        r'\balter\b', r'\bcreate\b', r'\btruncate\b', r'\bgrant\b',
-        r'\brevoke\b', r'\bexec\b', r'\bexecute\b'
-    ]
-    
-    for pattern in dangerous_patterns:
-        if re.search(pattern, sql_lower):
-            return False
-    
-    return True
+    try:
+        _validated_sql(sql)
+        return True
+    except Exception:
+        return False
 
 def _format_sql_readable(sql: str) -> str:
     import re
@@ -383,17 +379,28 @@ def _format_sql_readable(sql: str) -> str:
     return s.strip()
 
 def _execute_sql(sql: str):
-    if not _is_safe_sql_internal(sql):
-        raise ValueError("SQL contains dangerous keywords")
-    
+    sql = _validated_sql(sql)
+    timeout = min(float(os.getenv("BIGQUERY_TIMEOUT_SECONDS", "45")), 45)
+    config = bigquery.QueryJobConfig(
+        maximum_bytes_billed=int(os.getenv("BIGQUERY_MAX_BYTES_BILLED", "1000000000")),
+        use_legacy_sql=False,
+        job_timeout_ms=int(timeout * 1000),
+    )
+    job = get_bigquery_client().query(sql, job_config=config, timeout=10, retry=None)
     try:
-        query_job = bq_client.query(sql)
-        df = query_job.result().to_dataframe()
-        return df
-    except Exception as e:
-        logger.error(f"SQL execution failed: {sql}")
-        logger.error(f"Error: {str(e)}")
-        raise
+        rows = job.result(timeout=timeout, max_results=MAX_RESULT_ROWS, retry=None, job_retry=None)
+        # Bound the download; avoid the optional BigQuery Storage client/bundle.
+        records = [dict(row.items()) for row in rows]
+        frame = pd.DataFrame(records, columns=[field.name for field in rows.schema])
+        if frame.memory_usage(deep=True).sum() > 2_000_000:
+            raise ValueError("Result is too large. Ask for fewer columns or a smaller date range.")
+        return frame
+    except FutureTimeout:
+        try:
+            job.cancel(timeout=5, retry=None)
+        except Exception:
+            logger.warning("BigQuery cancellation failed")
+        raise TimeoutError("Query timed out. Try a smaller date range.") from None
 
 def _detect_query_type(question: str) -> str:
     question_lower = question.lower()
@@ -1154,7 +1161,7 @@ def _create_cohort_heatmap(df: pd.DataFrame, question: str) -> dict:
 @tool
 def chat_with_user(message: str) -> str:
     """Use this tool for casual conversation, greetings, and personal questions."""
-    llm = ChatGroq(model=GROQ_MODEL, temperature=0.7, api_key=GROQ_API_KEY)
+    llm = make_llm(temperature=0.7)
     
     conversation_prompt = f"""You are SmartLook, a friendly AI assistant for TheLook Ecommerce data.
 
@@ -1177,7 +1184,7 @@ Keep responses brief (2-4 sentences)."""
 @tool
 def answer_ecommerce_question(question: str) -> str:
     """Query and analyze TheLook Ecommerce database to answer business questions."""
-    llm = ChatGroq(model=GROQ_MODEL, temperature=0.1, api_key=GROQ_API_KEY)
+    llm = make_llm(temperature=0.1)
     sql_prompt = SYSTEM_PROMPT + "\n\nSchema:\n" + schema_snippet + "\n\nQuestion: " + question + "\n\nSQL:"
     
     try:
@@ -1293,7 +1300,7 @@ def create_visualization(question: str, chart_type: str = None) -> str:
     - Sales by Category and Brand  
     - Revenue Share % by Year and Product Category
     """
-    llm = ChatGroq(model=GROQ_MODEL, temperature=0.1, api_key=GROQ_API_KEY)
+    llm = make_llm(temperature=0.1)
     sql_prompt = SYSTEM_PROMPT + "\\n\\nSchema:\\n" + schema_snippet + "\\n\\nQuestion: " + question + "\\n\\nSQL:"
     
     try:
@@ -1325,6 +1332,14 @@ def create_visualization(question: str, chart_type: str = None) -> str:
         viz_result["question"] = question
         viz_result["row_count"] = len(df)
         viz_result["source_data"] = df.astype(str).to_dict(orient='records')
+        try:
+            insight = llm.invoke(
+                "Give concise insights and actionable recommendations based only on these chart data. "
+                "Do not invent facts.\nQuestion: " + question + "\n" + df.head(100).to_string(index=False)
+            )
+            viz_result["response_text"] = insight.content.strip()
+        except Exception:
+            viz_result["response_text"] = "Chart generated from the query results below."
         
         return json.dumps(viz_result)
         
@@ -1477,7 +1492,7 @@ def create_cohort_analysis(question: str, year: int = None, category: str = None
             })
         
         # Generate insights
-        llm = ChatGroq(model=GROQ_MODEL, temperature=0.3, api_key=GROQ_API_KEY)
+        llm = make_llm(temperature=0.3)
         
         # Get summary statistics
         avg_retention_month_1 = df[df['month_number'] == 1]['percentage'].mean()
@@ -1584,7 +1599,7 @@ CRITICAL:
 @tool
 def generate_and_show_sql(question: str) -> str:
     """Generate and validate SQL query without executing full analysis."""
-    llm = ChatGroq(model=GROQ_MODEL, temperature=0.1, api_key=GROQ_API_KEY)
+    llm = make_llm(temperature=0.1)
     
     # Clean the question to remove "generate/show sql" phrases
     cleaned_question = question.lower()
@@ -1648,38 +1663,16 @@ def generate_and_show_sql(question: str) -> str:
 tools = [chat_with_user, answer_ecommerce_question, create_visualization, create_cohort_analysis, generate_and_show_sql]
 tools_by_name = {tool.name: tool for tool in tools}
 
-# Global variable to track last tool call (for debugging/testing)
-_last_tool_call = None
+# Context variables are isolated per invocation, including concurrent requests.
+_conversation_history = ContextVar("conversation_history", default=None)
+MAX_HISTORY = 10
 
-# Conversation memory - stores recent context
-_conversation_history = []
-MAX_HISTORY = 10  # Keep last 10 exchanges
-
-def add_to_history(role: str, content: str):
-    """Add message to conversation history"""
-    global _conversation_history
-    _conversation_history.append({"role": role, "content": content})
-    # Keep only recent history
-    if len(_conversation_history) > MAX_HISTORY * 2:  # 2 messages per exchange
-        _conversation_history = _conversation_history[-MAX_HISTORY * 2:]
 
 def get_conversation_context() -> str:
-    """Get formatted conversation history for context"""
-    if not _conversation_history:
-        return ""
-    
-    context = "Recent conversation:\\n"
-    for msg in _conversation_history[-6:]:  # Last 3 exchanges
-        context += f"{msg['role']}: {msg['content'][:150]}...\\n"
-    return context
-
-def clear_history():
-    """Clear conversation history"""
-    global _conversation_history
-    _conversation_history = []
-
-# Create LLM
-llm = ChatGroq(model=GROQ_MODEL, temperature=0, api_key=GROQ_API_KEY)
+    history = _conversation_history.get() or []
+    return "Recent conversation:\n" + "\n".join(
+        f"{msg['role']}: {msg['content'][:1000]}" for msg in history[-6:]
+    )
 
 # Tool routing system prompt
 ROUTING_SYSTEM_PROMPT = """You are a routing agent that decides which tool to call based on the user's question.
@@ -1795,7 +1788,6 @@ Response: {"tool": "answer_ecommerce_question", "args": {"question": "What are t
 
 def agent_node(state: AgentState):
     """LLM decides which tool to call using JSON response"""
-    global _last_tool_call
     
     messages = state["messages"]
     user_message = messages[-1].content
@@ -1815,7 +1807,7 @@ Analyze the conversation history and current question. If this is a follow-up qu
 Response:"""
     
     try:
-        response = llm.invoke([SystemMessage(content=routing_prompt)])
+        response = make_llm().invoke([SystemMessage(content=routing_prompt)])
         response_text = response.content.strip()
         
         # Parse JSON response
@@ -1827,7 +1819,7 @@ Response:"""
         tool_args = tool_decision.get("args", {})
         
         # Store for testing/debugging
-        _last_tool_call = {"name": tool_name, "args": tool_args}
+        tool_call = {"name": tool_name, "args": tool_args}
         
         # Create a mock AIMessage with tool_calls in additional_kwargs
         ai_msg = AIMessage(
@@ -1841,12 +1833,12 @@ Response:"""
             }
         )
         
-        return {"messages": [ai_msg]}
+        return {"messages": [ai_msg], "tool_call": tool_call}
         
     except Exception as e:
         # Fallback: if routing fails, treat as conversational
         logger.error(f"Routing failed: {e}")
-        _last_tool_call = {"name": "chat_with_user", "args": {"message": user_message}}
+        tool_call = {"name": "chat_with_user", "args": {"message": user_message}}
         
         fallback_msg = AIMessage(
             content="",
@@ -1858,7 +1850,7 @@ Response:"""
                 }]
             }
         )
-        return {"messages": [fallback_msg]}
+        return {"messages": [fallback_msg], "tool_call": tool_call}
 
 def tool_node(state: AgentState):
     """Execute the tool"""
@@ -1904,70 +1896,12 @@ workflow.add_edge("tool_node", END)
 
 agent_executor = workflow.compile()
 
-# Public API
-def ask(question: str) -> str:
-    """Ask a question to the AI agent"""
+# Public API: explicit input and output; no process-global conversation state.
+def ask(question: str, history=None) -> dict:
+    history_token = _conversation_history.set(list(history or []))
     try:
-        # Add user message to history
-        add_to_history("User", question)
-        
-        messages = [HumanMessage(content=question)]
-        result = agent_executor.invoke({"messages": messages})
-        
-        # Get the final response (from ToolMessage)
-        response = None
-        for msg in reversed(result["messages"]):
-            if isinstance(msg, ToolMessage):
-                response = msg.content
-                break
-        
-        if not response:
-            response = result["messages"][-1].content
-        
-        # Add assistant response to history
-        add_to_history("Assistant", response)
-        
-        return response
-        
-    except Exception as e:
-        logger.error(f"Error in ask(): {str(e)}")
-        error_response = f"❌ Error: {str(e)}"
-        add_to_history("Assistant", error_response)
-        return error_response
-
-def check_connection():
-    """Check Groq and BigQuery connections"""
-    status = {"groq": False, "bigquery": False, "details": {}}
-    
-    try:
-        llm_test = ChatGroq(model=GROQ_MODEL, temperature=0, api_key=GROQ_API_KEY)
-        llm_test.invoke("test")
-        status["groq"] = True
-        status["details"]["groq"] = f"Connected - Model: {GROQ_MODEL}"
-    except Exception as e:
-        status["details"]["groq"] = f"Failed: {str(e)[:100]}"
-    
-    try:
-        query_job = bq_client.query("SELECT 1 as test")
-        query_job.result()
-        status["bigquery"] = True
-        status["details"]["bigquery"] = f"Connected - Project: {PROJECT_ID}"
-    except Exception as e:
-        status["details"]["bigquery"] = f"Failed: {str(e)[:100]}"
-    
-    return status
-
-# Helper to see tool routing
-def get_tool_calls(message):
-    """Extract tool calls from message"""
-    if hasattr(message, 'additional_kwargs') and 'tool_calls' in message.additional_kwargs:
-        return message.additional_kwargs['tool_calls']
-    return []
-
-def get_last_tool_call():
-    """Get the last tool call made by the agent (for testing)"""
-    return _last_tool_call
-
-def get_conversation_history():
-    """Get the conversation history (for debugging)"""
-    return _conversation_history
+        result = agent_executor.invoke({"messages": [HumanMessage(content=question)]})
+        response = result["messages"][-1].content
+        return {"response": response, "tool_call": result.get("tool_call")}
+    finally:
+        _conversation_history.reset(history_token)
