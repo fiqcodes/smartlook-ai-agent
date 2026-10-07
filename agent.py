@@ -575,7 +575,7 @@ def _detect_x_axis_label(x_col: str, question: str, df: pd.DataFrame) -> str:
             return 'Quarter'
         
         # Check if data looks like years (4-digit numbers)
-        if all(val.isdigit() and len(val) == 4 for val in sample_values if val.isdigit()):
+        if sample_values and all(val.isdigit() and len(val) == 4 for val in sample_values):
             return 'Year'
         
         # Check if data looks like country names
@@ -634,40 +634,19 @@ def _detect_y_axis_label(y_col: str, question: str, df: pd.DataFrame) -> tuple:
     y_col_lower = y_col.lower()
     question_lower = question.lower()
     
-    # Check actual data to infer type
-    sample_values = df[y_col].head(10)
-    
-    # Detect percentage (values between 0-1 or 0-100)
-    is_percentage = False
-    if 'percentage' in question_lower or 'share' in question_lower or '%' in question_lower or 'proportion' in question_lower:
-        is_percentage = True
-    elif 'percentage' in y_col_lower or 'share' in y_col_lower or 'percent' in y_col_lower:
-        is_percentage = True
-    elif sample_values.max() <= 1.0 and sample_values.min() >= 0:
-        # Values between 0-1 likely percentage
-        is_percentage = True
-    
-    # Detect revenue/money
-    is_revenue = False
-    if any(word in question_lower for word in ['revenue', 'sales', 'price', 'cost', 'profit', 'income']):
-        is_revenue = True
-    elif any(word in y_col_lower for word in ['revenue', 'sale_price', 'price', 'cost', 'profit']):
-        is_revenue = True
-    elif sample_values.max() > 1000 and not is_percentage:
-        # Large numbers likely revenue
-        is_revenue = True
-    
-    # Detect count
-    is_count = False
-    if not is_revenue and not is_percentage:
-        if any(word in question_lower for word in ['number of', 'count', 'quantity', 'how many', 'total']):
-            is_count = True
-        elif any(word in y_col_lower for word in ['count', 'quantity', 'total', 'num_']):
-            is_count = True
-        elif all(val == int(val) for val in sample_values if not pd.isna(val)):
-            # All integer values likely counts
-            is_count = True
-    
+    # Prefer the returned metric name over guesses based on value magnitude.
+    # A large count is still a count; an integer or a small number is not money/percent.
+    percentage_words = ['percentage', 'share', 'percent', 'proportion', 'pct']
+    money_words = ['revenue', 'sale_price', 'price', 'cost', 'profit', 'income']
+    count_words = ['count', 'quantity', 'num_', 'number', 'units']
+    is_percentage = any(word in y_col_lower for word in percentage_words)
+    is_count = not is_percentage and any(word in y_col_lower for word in count_words)
+    is_revenue = not is_percentage and not is_count and any(word in y_col_lower for word in money_words)
+    if not (is_percentage or is_count or is_revenue):
+        is_percentage = any(word in question_lower for word in percentage_words + ['%'])
+        is_count = not is_percentage and any(word in question_lower for word in ['number of', 'count', 'quantity', 'how many'])
+        is_revenue = not is_percentage and not is_count and any(word in question_lower for word in money_words)
+
     # Generate label
     if is_percentage:
         if 'product' in question_lower:
@@ -682,7 +661,7 @@ def _detect_y_axis_label(y_col: str, question: str, df: pd.DataFrame) -> tuple:
         label = 'Revenue ($)'
     elif is_count:
         if 'product' in question_lower:
-            label = 'Products Sold'
+            label = 'Product Count'
         elif 'order' in question_lower:
             label = 'Orders'
         elif 'customer' in question_lower or 'user' in question_lower:
@@ -1334,7 +1313,9 @@ def create_visualization(question: str, chart_type: str = None) -> str:
         viz_result["source_data"] = df.astype(str).to_dict(orient='records')
         try:
             insight = llm.invoke(
-                "Give concise insights and actionable recommendations based only on these chart data. "
+                "Summarize these chart data in at most three short factual sentences. "
+                "The chart is already displayed: do not include code, tables, or ASCII charts. "
+                "Do not infer causes, demand, profitability, or recommended budget allocations from counts alone. "
                 "Do not invent facts.\nQuestion: " + question + "\n" + df.head(100).to_string(index=False)
             )
             viz_result["response_text"] = insight.content.strip()

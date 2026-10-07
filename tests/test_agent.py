@@ -91,3 +91,18 @@ def test_chart_queries_once_and_preserves_download_data(monkeypatch):
     assert result['response_text'] == 'Insight from the existing rows'
     assert len(result['source_data']) == 2
     execute.assert_called_once()
+
+
+def test_product_count_chart_labels_match_live_result():
+    frame = pd.DataFrame({'department': ['Women', 'Men'], 'product_count': [15989, 13131]})
+    chart = json.loads(agent._create_visualization(frame, 'Product count by department', 'bar')['chart_json'])
+    assert chart['layout']['xaxis']['title']['text'] == 'Department'
+    assert chart['layout']['yaxis']['title']['text'] == 'Product Count'
+    assert '$' not in chart['layout']['yaxis']['tickformat']
+    assert '$' not in chart['data'][0]['texttemplate']
+
+
+def test_small_counts_are_not_percentages_and_revenue_remains_money():
+    frame = pd.DataFrame({'department': ['Women'], 'product_count': [1], 'revenue': [10000]})
+    assert agent._detect_y_axis_label('product_count', 'Product count', frame) == ('Product Count', False, False, True)
+    assert agent._detect_y_axis_label('revenue', 'Revenue by department', frame) == ('Revenue ($)', True, False, False)
