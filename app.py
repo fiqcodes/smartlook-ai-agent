@@ -34,7 +34,6 @@ def create_app(test_config=None):
     app.config.update(
         PRODUCTION=production,
         SECRET_KEY=os.getenv('APP_SECRET_KEY') or (None if production else secrets.token_hex(32)),
-        ACCESS_PASSWORD=os.getenv('APP_ACCESS_PASSWORD'),
         SESSION_COOKIE_NAME='smartlook_session',
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SECURE=production,
@@ -52,8 +51,7 @@ def create_app(test_config=None):
     def configuration_ready():
         return (bool(app.secret_key) and app.config['STORE'] is not None
                 and (not app.config['PRODUCTION'] or (
-                    len(app.secret_key) >= 32 and
-                    len(app.config.get('ACCESS_PASSWORD') or '') >= 12)))
+                    len(app.secret_key) >= 32)))
 
     def ip_key():
         # Vercel overwrites x-vercel-forwarded-for; do not trust arbitrary x-forwarded-for.
@@ -88,10 +86,6 @@ def create_app(test_config=None):
                 origin and urlsplit(origin).netloc != request.host
             ):
                 return error('Cross-site requests are not allowed', 403)
-        if request.path == '/login':
-            return None
-        if app.config['ACCESS_PASSWORD'] and not session.get('authenticated'):
-            return error('Please sign in to continue', 401) if request.path.startswith('/api/') else redirect('/login')
         if 'sid' not in session:
             session['sid'] = secrets.token_urlsafe(32)
             session.permanent = True
@@ -107,20 +101,8 @@ def create_app(test_config=None):
 
     @app.route('/login', methods=['GET', 'POST'])
     def login():
-        if request.method == 'POST':
-            store = app.config['STORE']
-            if not store.allow('login:' + ip_key(), 10, 900) or not store.allow('login-global', 600, 3600):
-                return render_template('login.html', error='Too many attempts. Try again in 15 minutes.'), 429
-            submitted = request.form.get('password', '')
-            expected = app.config['ACCESS_PASSWORD'] or ''
-            if expected and hmac.compare_digest(submitted.encode(), expected.encode()):
-                session.clear()
-                session['authenticated'] = True
-                session['sid'] = secrets.token_urlsafe(32)
-                session.permanent = True
-                return redirect('/')
-            return render_template('login.html', error='Incorrect access password.'), 401
-        return render_template('login.html')
+        # Keep old bookmarks working after opening the portfolio demo to everyone.
+        return redirect('/')
 
     @app.route('/')
     def index():
