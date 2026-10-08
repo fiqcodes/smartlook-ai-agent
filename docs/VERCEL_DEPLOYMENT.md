@@ -23,7 +23,6 @@ credentials into a Git commit, issue, PR, or a browser-side JavaScript file.
 | `GOOGLE_CLOUD_PROJECT` | Google project in which query jobs run and are billed |
 | `GCP_SERVICE_ACCOUNT_JSON` | Complete JSON service-account credential, as a single environment value (`GCP_SERVICE_ACCOUNT` is also accepted) |
 | `APP_SECRET_KEY` | At least 32 random characters; generate locally with `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
-| `APP_ACCESS_PASSWORD` | A strong password of at least 12 characters, shared only with intended demo users |
 | `UPSTASH_REDIS_REST_URL` | HTTPS endpoint from an Upstash Redis database |
 | `UPSTASH_REDIS_REST_TOKEN` | Read/write REST token for that Redis database |
 
@@ -46,6 +45,9 @@ replacement for Google IAM.
 access. The application does not use the README's former
 `GOOGLE_APPLICATION_CREDENTIALS` / `BIGQUERY_PROJECT_ID` variables.
 
+The portfolio demo is public. `APP_ACCESS_PASSWORD` is no longer used.
+Visitors get isolated anonymous sessions; API credentials remain server-side.
+
 ## Default limits
 
 | Setting | Default |
@@ -53,7 +55,6 @@ access. The application does not use the README's former
 | `CHAT_REQUESTS_PER_MINUTE` | 5 per session |
 | `IP_REQUESTS_PER_MINUTE` | 10 per IP |
 | `DAILY_CHAT_LIMIT` | 200 per environment, UTC day |
-| Login attempts | 10 per IP per 15-minute window; 600 globally per hour |
 | `BIGQUERY_MAX_BYTES_BILLED` | 1,000,000,000 bytes per query |
 | `BIGQUERY_TIMEOUT_SECONDS` | 45 seconds maximum; cancellation attempted on timeout |
 | `MAX_RESULT_ROWS` | 1,000 maximum; ordinary generated queries default to 100 |
@@ -76,7 +77,7 @@ raising limits without checking costs.
 3. Deploy a Preview and confirm the build succeeds. Until required settings are
    present, the app returns a setup page/503 instead of exposing unprotected AI.
 4. Open the preview in an authenticated browser if Vercel protection applies.
-5. Sign in with the app access password. Verify a greeting, a read-only data
+5. Open the app directly (no password required). Verify a greeting, a read-only data
    question, a follow-up, a chart, CSV and PNG downloads, and a cohort question.
 6. Use a second browser profile to confirm histories remain separate. Reload
    the first tab and switch conversations to check context persistence.
@@ -103,13 +104,12 @@ A successful cloud build remains the definitive deployment check.
 
 ## Troubleshooting
 
-- **Setup page / 503:** verify the secret key, access password length, and both
+- **Setup page / 503:** verify the secret key and both
   Redis REST values; for chat also verify all three AI credential variables.
-- **401:** sign in again; rotating `APP_SECRET_KEY` invalidates existing cookies.
 - **409:** a request from the same browser session is already running. Wait; a
   worker interrupted by the platform releases its lock by expiry after 350s.
 - **429:** a configured request budget is exhausted. The generic Retry-After is
-  60s; daily budgets reset at the next UTC day and login budgets after 15 minutes.
+  60s; daily budgets reset at the next UTC day.
 - **413:** narrow the question/result. Data is returned only once in responses.
 - **Storage unavailable:** verify Redis token permissions, connectivity, and
   quotas. At 30 saved conversations, clear history before starting more chats.

@@ -11,7 +11,7 @@ from storage import MemoryStore, StorageUnavailable
 @pytest.fixture
 def app():
     return create_app(dict(TESTING=True, PRODUCTION=False, SECRET_KEY='test-secret',
-        ACCESS_PASSWORD=None, STORE=MemoryStore(),
+        STORE=MemoryStore(),
         CHAT_LIMIT=100, IP_LIMIT=100, DAILY_LIMIT=100,
         AGENT_RUNNER=lambda message, history: {
             'response': f'{message}; previous={len(history)}',
@@ -46,16 +46,18 @@ def test_history_shared_between_app_instances_and_bounded(app):
     assert other.get('/api/history?conversation_id=chat-one').json['count'] == 20
 
 
-def test_password_gate_and_cross_site_rejection(app):
-    app.config['ACCESS_PASSWORD'] = 'long-test-password'
-    c = app.test_client()
-    assert c.get('/').status_code == 302
-    assert chat(c).status_code == 401
-    assert c.post('/login', data={'password': 'bad'}).status_code == 401
-    assert c.post('/login', data={'password': 'long-test-password'}, headers={'Origin': 'https://evil.test'}).status_code == 403
-    assert c.post('/login', data={'password': 'long-test-password'}).status_code == 302
+def test_public_production_access_and_cross_site_rejection(app, monkeypatch):
+    monkeypatch.setenv('APP_ACCESS_PASSWORD', 'legacy-password-is-ignored')
+    public = create_app({**app.config, 'PRODUCTION': True, 'SECRET_KEY': 's' * 32})
+    c = public.test_client()
+    assert c.get('/').status_code == 200
+    assert c.get('/login').location == '/'
     assert chat(c).status_code == 200
+    assert c.post('/api/chat', json={'message': 'hi', 'conversation_id': 'one'},
+                  headers={'Origin': 'https://evil.test'}).status_code == 403
     assert c.post('/api/clear', headers={'Sec-Fetch-Site': 'cross-site'}).status_code == 403
+    public.config['SECRET_KEY'] = 'too-short'
+    assert public.test_client().get('/').status_code == 503
 
 
 def test_limits_fail_closed(app):

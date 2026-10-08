@@ -156,7 +156,7 @@ Robust error handling and recovery:
 
 ## Deployment safeguards
 
-- Shared demo access password; this is not a role-based multi-user identity system.
+- Public portfolio demo: visitors can start chatting without an account or password.
 - Signed, HTTP-only session cookies with isolated Redis conversation histories.
 - Atomic session locks plus per-session, per-IP, and daily request limits.
 - One read-only query per call, restricted to the known TheLook public tables.
