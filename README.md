@@ -1,6 +1,7 @@
 # SmartLook AI Agent
 
 <div align="center">
+  <img src="public/assets/smartlook_logo.png" alt="SmartLook logo" width="320">
 
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-FF6B6B?style=for-the-badge&logo=langchain&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
