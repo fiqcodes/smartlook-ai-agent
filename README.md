@@ -22,7 +22,7 @@ https://github.com/user-attachments/assets/da746a68-1a64-404e-8b11-ed9349c14a3f
 
 **SmartLook** is a generative business intelligence and text-to-SQL agent that analyzes datasets from an e-commerce company, detects trends, and generates accurate SQL queries and visualizations to support business analysis tasks. The system features an intuitive JavaScript interface that accelerates insight generation, automates exploratory analysis, and reduces manual effort for analysts.
 
-Try it out here: [SmartLook AI Agent](https://smartlook-ai-agent--rafiqkastara7.replit.app/)
+Try the public demo: [SmartLook AI Agent](https://smartlook-ai-agent.vercel.app/)
 
 ## Key Features
 
@@ -58,14 +58,19 @@ python app.py
 ```
 
 Open http://127.0.0.1:8000. Local development uses in-memory conversation storage
-unless Redis is configured. Real AI requests require Groq and Google Cloud
-credentials; the homepage can start without them.
+unless Redis is configured. Real AI requests require `GROQ_API_KEY`,
+`GOOGLE_CLOUD_PROJECT`, and a Google service account credential
+(`GCP_SERVICE_ACCOUNT_JSON` or `GCP_SERVICE_ACCOUNT`). Configure these in
+`.env.local`; the homepage can start without provider credentials.
 
 ## Deploy to Vercel
 
 See [the deployment guide](docs/VERCEL_DEPLOYMENT.md) for account setup, required
-secrets, Redis, budgets, and validation steps. Vercel detects `app.py:app` using
-the Flask preset; no frontend build command or output directory is needed.
+secrets, Redis, budgets, and validation steps. The public portfolio demo has no
+login or access password. Vercel detects `app.py:app` using the Flask preset; no
+frontend build command or output directory is needed. After setting environment
+variables or connecting Redis, redeploy so the function receives the updated
+configuration. Verify a real anonymous chat, not only `/api/health`.
 
 The backend uses Flask, LangGraph, LangChain Groq, BigQuery, Pandas, Plotly,
 and SQLGlot. The frontend remains vanilla HTML/CSS/JavaScript with Plotly.js.
@@ -76,12 +81,12 @@ Exact dependency versions are committed in `requirements.txt`; update them from
 ## Project structure
 
 ```text
-app.py                 Flask routes, authentication, limits, response handling
+app.py                 Flask routes, anonymous sessions, limits, response handling
 agent.py               LangGraph agent, read-only SQL validation, charts
 storage.py             Redis sessions, locks, and rate limits
 public/assets/         Images and demo assets served by Vercel CDN
 templates/index.html   Existing chat frontend
-templates/login.html   Password entry page
+templates/login.html   Legacy template; the public app no longer requires login
 requirements.in        Direct dependency constraints
 requirements.txt       Locked runtime dependencies
 vercel.json            Flask function configuration
